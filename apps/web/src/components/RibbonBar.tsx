@@ -12,7 +12,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import type { ExportFormat } from "@imladris/shared";
-import { api } from "../lib/api";
+import { api, isBrowserStandaloneMode } from "../lib/api";
 import { useWorkspaceStore } from "../state/workspaceStore";
 import { TablePickerPopover } from "./TablePickerPopover";
 
@@ -36,6 +36,10 @@ export function RibbonBar() {
         activeFilePath,
         exportFormat
       );
+      if (isBrowserStandaloneMode()) {
+        appendConsole("info", `Downloaded ${activeFilePath} (${exportFormat}).`);
+        return;
+      }
       appendConsole(
         "info",
         `Export ready: ${res.outputRelPath} (${res.sizeBytes} bytes)`
@@ -70,18 +74,19 @@ export function RibbonBar() {
 
   return (
     <div
-      className="flex h-9 shrink-0 items-center justify-between px-3 text-xs"
+      className="no-scrollbar flex h-9 shrink-0 items-center justify-between gap-2 overflow-x-auto px-3 text-xs"
       style={{
         backgroundColor: "var(--bg-sidebar)",
         borderBottom: "1px solid var(--border-subtle)",
       }}
     >
-      <div className="flex items-center gap-1">
+      <div className="flex shrink-0 items-center gap-1">
         <button
           type="button"
           onClick={() => insertIntoEditor("**bold**")}
           title="Bold"
-          className="rounded px-2 py-1 hover:bg-black/5"
+          aria-label="Bold"
+          className="ui-hover rounded px-2 py-1"
         >
           <Bold className="h-3.5 w-3.5" />
         </button>
@@ -89,7 +94,8 @@ export function RibbonBar() {
           type="button"
           onClick={() => insertIntoEditor("*italic*")}
           title="Italic"
-          className="rounded px-2 py-1 hover:bg-black/5"
+          aria-label="Italic"
+          className="ui-hover rounded px-2 py-1"
         >
           <Italic className="h-3.5 w-3.5" />
         </button>
@@ -97,7 +103,8 @@ export function RibbonBar() {
           type="button"
           onClick={() => insertIntoEditor("\n## Section\n")}
           title="Heading"
-          className="rounded px-2 py-1 hover:bg-black/5"
+          aria-label="Heading"
+          className="ui-hover rounded px-2 py-1"
         >
           <Heading2 className="h-3.5 w-3.5" />
         </button>
@@ -107,7 +114,7 @@ export function RibbonBar() {
             insertIntoEditor('\n```{python}\nprint("Hello")\n```\n')
           }
           title="Insert Python Chunk"
-          className="flex items-center gap-1 rounded px-2 py-1 hover:bg-black/5"
+          className="ui-hover flex items-center gap-1 whitespace-nowrap rounded px-2 py-1"
         >
           <Code2 className="h-3.5 w-3.5" /> +Python
         </button>
@@ -117,7 +124,7 @@ export function RibbonBar() {
             insertIntoEditor('\n```{r}\nprint("Hello R")\n```\n')
           }
           title="Insert R Chunk"
-          className="flex items-center gap-1 rounded px-2 py-1 hover:bg-black/5"
+          className="ui-hover flex items-center gap-1 whitespace-nowrap rounded px-2 py-1"
         >
           <Code2 className="h-3.5 w-3.5" /> +R
         </button>
@@ -127,7 +134,7 @@ export function RibbonBar() {
             type="button"
             onClick={() => setShowTablePicker((v) => !v)}
             title="Insert Table"
-            className="flex items-center gap-1 rounded px-2 py-1 hover:bg-black/5"
+            className="ui-hover flex items-center gap-1 whitespace-nowrap rounded px-2 py-1"
           >
             <Table className="h-3.5 w-3.5" /> Table
           </button>
@@ -140,23 +147,21 @@ export function RibbonBar() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <button
           type="button"
           onClick={handleRestartKernel}
-          className="flex items-center gap-1 rounded px-2 py-1 hover:bg-black/5"
+          className="ui-hover flex items-center gap-1 whitespace-nowrap rounded px-2 py-1"
         >
-          <RotateCcw className="h-3.5 w-3.5" /> Restart Kernel
+          <RotateCcw className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Restart Kernel</span>
         </button>
 
         <select
+          aria-label="Export format"
           value={exportFormat}
           onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
-          className="rounded px-1.5 py-0.5 text-xs"
-          style={{
-            backgroundColor: "var(--bg-surface)",
-            border: "1px solid var(--border-subtle)",
-          }}
+          className="ui-control rounded px-1.5 py-0.5 text-xs"
         >
           <option value="html">HTML</option>
           <option value="pdf">PDF</option>
@@ -173,11 +178,7 @@ export function RibbonBar() {
           type="button"
           onClick={handleExport}
           disabled={!activeFilePath}
-          className="flex items-center gap-1 rounded px-2 py-1 font-medium disabled:opacity-50"
-          style={{
-            backgroundColor: "var(--bg-surface)",
-            border: "1px solid var(--border-subtle)",
-          }}
+          className="ui-control flex items-center gap-1 rounded px-2 py-1 font-medium disabled:opacity-50"
         >
           <Download className="h-3.5 w-3.5" /> Export
         </button>

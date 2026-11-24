@@ -32,6 +32,8 @@ export function HeaderBar({ onCreateWorkspace, onLogout }: Props) {
     docContent,
     workbenchMode,
     setWorkbenchMode,
+    gridTopology,
+    setGridTopology,
     theme,
     toggleTheme,
     collabPeers,
@@ -79,37 +81,58 @@ export function HeaderBar({ onCreateWorkspace, onLogout }: Props) {
     }
   }
 
+  function cycleLayout() {
+    if (workbenchMode === "focus") {
+      setWorkbenchMode("rstudio");
+      setGridTopology("quad4");
+    } else if (gridTopology === "quad4") {
+      setGridTopology("quad6");
+    } else {
+      setWorkbenchMode("focus");
+    }
+  }
+
+  const layoutLabel =
+    workbenchMode === "focus"
+      ? "Focus"
+      : gridTopology === "quad6"
+        ? "6-Quad"
+        : "4-Quad";
+
   return (
     <header
-      className="flex h-11 shrink-0 items-center justify-between px-3"
+      className="no-scrollbar flex h-11 shrink-0 items-center justify-between gap-2 overflow-x-auto px-3"
       style={{
         backgroundColor: "var(--bg-header)",
         borderBottom: "1px solid var(--border-subtle)",
       }}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <span className="text-sm font-semibold tracking-tight">Imladris</span>
         <span
-          className="rounded px-1.5 py-0.5 text-[10px] font-medium"
-          style={{
-            backgroundColor: wsConnected ? "var(--success)" : "var(--bg-hover)",
-            color: wsConnected ? "#ffffff" : "var(--fg-muted)",
-          }}
+          className="inline-flex items-center gap-1.5 text-xs"
+          style={{ color: wsConnected ? "var(--success)" : "var(--fg-muted)" }}
+          title={wsConnected ? "Connected to collaboration server" : "Offline"}
         >
-          {wsConnected ? "LIVE" : "OFFLINE"}
+          <span
+            className="h-2 w-2 rounded-full"
+            style={{
+              backgroundColor: wsConnected ? "var(--success)" : "var(--fg-muted)",
+            }}
+          />
+          <span className="hidden sm:inline">
+            {wsConnected ? "Connected" : "Offline"}
+          </span>
         </span>
 
         <select
+          aria-label="Active workspace"
           value={activeWorkspace?.id ?? ""}
           onChange={(e) => {
             const found = workspaces.find((w) => w.id === e.target.value) ?? null;
             setActiveWorkspace(found);
           }}
-          className="rounded-md px-2 py-1 text-xs font-medium outline-none"
-          style={{
-            backgroundColor: "var(--bg-surface)",
-            border: "1px solid var(--border-subtle)",
-          }}
+          className="ui-control max-w-[180px] rounded-md px-2 py-1 text-xs font-medium"
         >
           {workspaces.map((ws) => (
             <option key={ws.id} value={ws.id}>
@@ -122,35 +145,40 @@ export function HeaderBar({ onCreateWorkspace, onLogout }: Props) {
           type="button"
           onClick={onCreateWorkspace}
           title="New Workspace"
-          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs hover:opacity-80"
-          style={{
-            backgroundColor: "var(--bg-surface)",
-            border: "1px solid var(--border-subtle)",
-          }}
+          className="ui-control flex items-center gap-1 rounded-md px-2 py-1 text-xs"
         >
-          <Plus className="h-3.5 w-3.5" /> New
+          <Plus className="h-3.5 w-3.5" />
+          <span className="hidden md:inline">New</span>
         </button>
 
         {activeFilePath && (
-          <span className="ml-1 font-mono text-xs" style={{ color: "var(--fg-muted)" }}>
+          <span
+            className="ml-1 hidden font-mono text-xs lg:inline"
+            style={{ color: "var(--fg-muted)" }}
+          >
             {activeFilePath}
           </span>
         )}
       </div>
 
-      <div className="flex items-center gap-2">
-        <div className="flex -space-x-1.5">
-          {collabPeers.slice(0, 5).map((peer) => (
-            <span
-              key={peer.clientId}
-              title={peer.name}
-              className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ring-2 ring-white"
-              style={{ backgroundColor: peer.color }}
-            >
-              {peer.name.slice(0, 1).toUpperCase()}
-            </span>
-          ))}
-        </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        {collabPeers.length > 0 && (
+          <div className="mr-1 hidden -space-x-1.5 sm:flex">
+            {collabPeers.slice(0, 5).map((peer) => (
+              <span
+                key={peer.clientId}
+                title={peer.name}
+                className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                style={{
+                  backgroundColor: peer.color,
+                  boxShadow: "0 0 0 2px var(--bg-header)",
+                }}
+              >
+                {peer.name.slice(0, 1).toUpperCase()}
+              </span>
+            ))}
+          </div>
+        )}
 
         <button
           type="button"
@@ -161,79 +189,60 @@ export function HeaderBar({ onCreateWorkspace, onLogout }: Props) {
             color: "var(--accent-fg)",
           }}
         >
-          <Play className="h-3.5 w-3.5" /> Run All
+          <Play className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Run All</span>
         </button>
 
         <button
           type="button"
-          onClick={() =>
-            setWorkbenchMode(workbenchMode === "rstudio" ? "focus" : "rstudio")
-          }
-          title="Switch Workbench Mode"
-          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs"
-          style={{
-            backgroundColor: "var(--bg-surface)",
-            border: "1px solid var(--border-subtle)",
-          }}
+          onClick={cycleLayout}
+          title="Cycle Layout: 4-Quad → 6-Quad Ultrawide → Focus"
+          className="ui-control hidden items-center gap-1 rounded-md px-2 py-1 text-xs md:flex"
         >
-          {workbenchMode === "rstudio" ? (
-            <>
-              <LayoutGrid className="h-3.5 w-3.5" /> 4-Pane
-            </>
+          {workbenchMode === "focus" ? (
+            <Columns2 className="h-3.5 w-3.5" />
           ) : (
-            <>
-              <Columns2 className="h-3.5 w-3.5" /> Focus
-            </>
+            <LayoutGrid className="h-3.5 w-3.5" />
           )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setShowPluginModal(true)}
-          title="Plugins"
-          className="rounded-md p-1.5"
-          style={{
-            backgroundColor: "var(--bg-surface)",
-            border: "1px solid var(--border-subtle)",
-          }}
-        >
-          <Puzzle className="h-3.5 w-3.5" />
+          <span>{layoutLabel}</span>
         </button>
 
         <button
           type="button"
           onClick={() => setShowHistoryModal(true)}
           title="Revision History"
-          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs"
-          style={{
-            backgroundColor: "var(--bg-surface)",
-            border: "1px solid var(--border-subtle)",
-          }}
+          className="ui-control flex items-center gap-1 rounded-md px-2 py-1 text-xs"
         >
-          <History className="h-3.5 w-3.5" /> History
+          <History className="h-3.5 w-3.5" />
+          <span className="hidden lg:inline">History</span>
         </button>
 
         <button
           type="button"
           onClick={() => setShowShareModal(true)}
-          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs"
-          style={{
-            backgroundColor: "var(--bg-surface)",
-            border: "1px solid var(--border-subtle)",
-          }}
+          title="Share Workspace"
+          className="ui-control flex items-center gap-1 rounded-md px-2 py-1 text-xs"
         >
-          <Share2 className="h-3.5 w-3.5" /> Share
+          <Share2 className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Share</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowPluginModal(true)}
+          title="Plugins"
+          aria-label="Plugins"
+          className="ui-control rounded-md p-1.5"
+        >
+          <Puzzle className="h-3.5 w-3.5" />
         </button>
 
         <button
           type="button"
           onClick={toggleTheme}
           title="Toggle Theme"
-          className="rounded-md p-1.5"
-          style={{
-            backgroundColor: "var(--bg-surface)",
-            border: "1px solid var(--border-subtle)",
-          }}
+          aria-label="Toggle Theme"
+          className="ui-control rounded-md p-1.5"
         >
           {theme === "light" ? (
             <Moon className="h-3.5 w-3.5" />
@@ -242,7 +251,10 @@ export function HeaderBar({ onCreateWorkspace, onLogout }: Props) {
           )}
         </button>
 
-        <span className="text-xs" style={{ color: "var(--fg-muted)" }}>
+        <span
+          className="hidden text-xs xl:inline"
+          style={{ color: "var(--fg-muted)" }}
+        >
           {user?.displayName}
         </span>
 
@@ -250,11 +262,8 @@ export function HeaderBar({ onCreateWorkspace, onLogout }: Props) {
           type="button"
           onClick={onLogout}
           title="Sign Out"
-          className="rounded-md p-1.5"
-          style={{
-            backgroundColor: "var(--bg-surface)",
-            border: "1px solid var(--border-subtle)",
-          }}
+          aria-label="Sign Out"
+          className="ui-control rounded-md p-1.5"
         >
           <LogOut className="h-3.5 w-3.5" />
         </button>

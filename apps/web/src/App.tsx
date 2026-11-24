@@ -1,16 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Antonio De Gaetano <antux912012@users.noreply.github.com>
 // SPDX-License-Identifier: Apache-2.0
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import type { User } from "@imladris/shared";
-import { api } from "./lib/api";
+import { api, getConfiguredServerUrl, isBrowserStandaloneMode } from "./lib/api";
 import { useWorkspaceStore } from "./state/workspaceStore";
 import { AuthGate } from "./components/AuthGate";
 import { HeaderBar } from "./components/HeaderBar";
 import { RibbonBar } from "./components/RibbonBar";
-import { ShareWorkspaceModal } from "./components/ShareWorkspaceModal";
-import { PluginBrowserModal } from "./components/PluginBrowserModal";
-import { HistoryModal } from "./components/HistoryModal";
 import { WorkbenchLayout } from "./components/WorkbenchLayout";
 import { FileTreePane } from "./components/FileTreePane";
 import { ConsolePane } from "./components/ConsolePane";
@@ -20,6 +17,22 @@ import { CommentsPane } from "./components/CommentsPane";
 import { LivePreviewPane } from "./components/LivePreviewPane";
 import { PlotsPane } from "./components/PlotsPane";
 import { ElrondAiPane } from "./components/ElrondAiPane";
+
+const ShareWorkspaceModal = lazy(() =>
+  import("./components/ShareWorkspaceModal").then((m) => ({
+    default: m.ShareWorkspaceModal,
+  }))
+);
+const PluginBrowserModal = lazy(() =>
+  import("./components/PluginBrowserModal").then((m) => ({
+    default: m.PluginBrowserModal,
+  }))
+);
+const HistoryModal = lazy(() =>
+  import("./components/HistoryModal").then((m) => ({
+    default: m.HistoryModal,
+  }))
+);
 
 export function App() {
   const {
@@ -54,7 +67,19 @@ export function App() {
         setUser(res.user);
         await loadWorkspaces();
       })
-      .catch(() => {
+      .catch(async () => {
+        // On static hosts (e.g. GitHub Pages) with no backend server configured,
+        // automatically launch Browser Standalone Mode so the app works immediately.
+        if (
+          typeof window !== "undefined" &&
+          window.location.hostname.endsWith(".github.io") &&
+          !getConfiguredServerUrl()
+        ) {
+          const standalone = await api.enterStandaloneMode();
+          setUser(standalone.user);
+          await loadWorkspaces();
+          return;
+        }
         setUser(null);
       })
       .finally(() => setBooting(false));
@@ -85,10 +110,17 @@ export function App() {
         if (!cancelled) setEnvVariables([]);
       });
 
-    const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const sock = new WebSocket(
-      `${wsProto}//${window.location.host}/ws/events/${activeWorkspace.id}`
-    );
+    if (isBrowserStandaloneMode()) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const configuredBase = getConfiguredServerUrl();
+    const wsTarget = configuredBase
+      ? configuredBase.replace(/^http/i, "ws")
+      : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`;
+    const sock = new WebSocket(`${wsTarget}/ws/events/${activeWorkspace.id}`);
     sock.onmessage = (evt) => {
       try {
         const msg = JSON.parse(evt.data as string) as {
@@ -179,11 +211,15 @@ export function App() {
           aiPane: <ElrondAiPane />,
         }}
       />
-      <ShareWorkspaceModal onJoinedWorkspace={loadWorkspaces} />
-      <PluginBrowserModal />
-      <HistoryModal
-        onRestored={(content) => useWorkspaceStore.getState().replaceEditorContent(content)}
-      />
+      <Suspense fallback={null}>
+        <ShareWorkspaceModal onJoinedWorkspace={loadWorkspaces} />
+        <PluginBrowserModal />
+        <HistoryModal
+          onRestored={(content) =>
+            useWorkspaceStore.getState().replaceEditorContent(content)
+          }
+        />
+      </Suspense>
     </div>
   );
 }

@@ -87,7 +87,8 @@ export function FileTreePane() {
               type="button"
               onClick={handleNewFile}
               title="New File"
-              className="rounded p-1 hover:bg-black/5"
+              aria-label="New File"
+              className="ui-hover rounded p-1"
             >
               <FilePlus className="h-3.5 w-3.5" />
             </button>
@@ -95,7 +96,8 @@ export function FileTreePane() {
               type="button"
               onClick={handleNewFolder}
               title="New Folder"
-              className="rounded p-1 hover:bg-black/5"
+              aria-label="New Folder"
+              className="ui-hover rounded p-1"
             >
               <FolderPlus className="h-3.5 w-3.5" />
             </button>

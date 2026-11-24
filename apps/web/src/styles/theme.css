@@ -4,14 +4,16 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light dark;
   --bg-window: #fafafa;
   --bg-header: #ebebeb;
   --bg-surface: #ffffff;
   --bg-sidebar: #f3f3f3;
-  --bg-hover: #e4e4e4;
+  --bg-hover: rgba(0, 0, 0, 0.06);
   --fg-primary: #2e3436;
   --fg-muted: #5e6469;
   --border-subtle: #d5d5d5;
+  --resize-handle: rgba(0, 0, 0, 0.12);
   --accent: #3584e4;
   --accent-fg: #ffffff;
   --success: #26a269;
@@ -21,15 +23,21 @@
   --font-mono: "JetBrains Mono", "Source Code Pro", ui-monospace, monospace;
 }
 
+[data-theme="light"] {
+  color-scheme: light;
+}
+
 [data-theme="dark"] {
+  color-scheme: dark;
   --bg-window: #1e1e1e;
   --bg-header: #2a2a2a;
   --bg-surface: #242424;
   --bg-sidebar: #202020;
-  --bg-hover: #333333;
+  --bg-hover: rgba(255, 255, 255, 0.08);
   --fg-primary: #eeeeee;
   --fg-muted: #9a9996;
   --border-subtle: #3d3d3d;
+  --resize-handle: rgba(255, 255, 255, 0.14);
   --accent: #62a0ea;
   --accent-fg: #111111;
   --success: #33d17a;
@@ -46,6 +54,67 @@ body,
   color: var(--fg-primary);
   font-family: var(--font-sans);
   font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.ui-hover:hover {
+  background-color: var(--bg-hover);
+}
+
+.ui-control {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--fg-primary);
+}
+
+.ui-control:hover {
+  background-color: var(--bg-hover);
+}
+
+.resize-handle-v {
+  width: 3px;
+  background-color: var(--resize-handle);
+  transition: background-color 120ms ease;
+}
+.resize-handle-v:hover,
+.resize-handle-v[data-resize-handle-active] {
+  background-color: var(--accent);
+}
+
+.resize-handle-h {
+  height: 3px;
+  background-color: var(--resize-handle);
+  transition: background-color 120ms ease;
+}
+.resize-handle-h:hover,
+.resize-handle-h[data-resize-handle-active] {
+  background-color: var(--accent);
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+h1, h2, h3 {
+  text-wrap: balance;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }
 
 .cm-editor {

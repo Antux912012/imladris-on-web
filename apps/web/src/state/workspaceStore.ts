@@ -23,6 +23,9 @@ export interface CollabPeer {
   color: string;
 }
 
+export type GridTopology = "quad4" | "quad6";
+export type MobilePane = "files" | "editor" | "console" | "preview" | "tools";
+
 interface WorkspaceState {
   user: User | null;
   workspaces: WorkspaceWithRole[];
@@ -31,6 +34,8 @@ interface WorkspaceState {
   activeFilePath: string | null;
   docContent: string;
   workbenchMode: WorkbenchMode;
+  gridTopology: GridTopology;
+  mobilePane: MobilePane;
   theme: "light" | "dark";
   consoleEntries: ConsoleEntry[];
   plots: string[];
@@ -52,6 +57,8 @@ interface WorkspaceState {
   selectFile: (relPath: string | null) => void;
   setDocContent: (content: string) => void;
   setWorkbenchMode: (mode: WorkbenchMode) => void;
+  setGridTopology: (topology: GridTopology) => void;
+  setMobilePane: (pane: MobilePane) => void;
   toggleTheme: () => void;
   appendConsole: (kind: ConsoleEntry["kind"], text: string) => void;
   clearConsole: () => void;
@@ -78,6 +85,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   activeFilePath: null,
   docContent: "",
   workbenchMode: "rstudio",
+  gridTopology:
+    typeof window !== "undefined" && window.innerWidth >= 1920 ? "quad6" : "quad4",
+  mobilePane: "editor",
   theme: "light",
   consoleEntries: [],
   plots: [],
@@ -114,14 +124,18 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set({
       activeFilePath: relPath,
       workbenchMode: profile.workbenchMode,
+      mobilePane: "editor",
     });
   },
   setDocContent: (docContent) => set({ docContent }),
   setWorkbenchMode: (workbenchMode) => set({ workbenchMode }),
+  setGridTopology: (gridTopology) => set({ gridTopology }),
+  setMobilePane: (mobilePane) => set({ mobilePane }),
   toggleTheme: () =>
     set((s) => {
       const next = s.theme === "light" ? "dark" : "light";
       document.documentElement.setAttribute("data-theme", next);
+      document.querySelector('meta[name="color-scheme"]')?.setAttribute("content", next);
       return { theme: next };
     }),
   appendConsole: (kind, text) =>

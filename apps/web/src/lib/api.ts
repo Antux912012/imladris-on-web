@@ -15,6 +15,7 @@ import type {
   Workspace,
   WorkspaceMember,
 } from "@imladris/shared";
+import { localStandaloneApi } from "./localStore";
 
 export interface FileTreeItem {
   relPath: string;
@@ -29,8 +30,51 @@ export interface WorkspaceWithRole extends Workspace {
   role: Role;
 }
 
+const SERVER_URL_KEY = "imladris_web_server_url";
+const STANDALONE_MODE_KEY = "imladris_web_standalone_mode";
+
+export function getConfiguredServerUrl(): string {
+  try {
+    return localStorage.getItem(SERVER_URL_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function setConfiguredServerUrl(url: string): void {
+  try {
+    const clean = url.trim().replace(/\/+$/, "");
+    if (clean) localStorage.setItem(SERVER_URL_KEY, clean);
+    else localStorage.removeItem(SERVER_URL_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+export function isBrowserStandaloneMode(): boolean {
+  try {
+    return localStorage.getItem(STANDALONE_MODE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setBrowserStandaloneMode(enabled: boolean): void {
+  try {
+    if (enabled) localStorage.setItem(STANDALONE_MODE_KEY, "1");
+    else localStorage.removeItem(STANDALONE_MODE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function resolveApiUrl(path: string): string {
+  const base = getConfiguredServerUrl();
+  return base ? `${base}${path}` : path;
+}
+
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const resp = await fetch(url, {
+  const resp = await fetch(resolveApiUrl(url), {
     credentials: "include",
     headers: {
       ...(init?.body ? { "Content-Type": "application/json" } : {}),
@@ -46,19 +90,36 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  me: () => requestJson<{ user: User; authMode: "local" | "team" }>("/api/auth/me"),
-  login: (email: string, password: string) =>
-    requestJson<{ user: User }>("/api/auth/login", {
+  me: async () => {
+    if (isBrowserStandaloneMode()) {
+      return {
+        user: localStandaloneApi.getUser(),
+        authMode: "local" as const,
+      };
+    }
+    return requestJson<{ user: User; authMode: "local" | "team" }>("/api/auth/me");
+  },
+
+  enterStandaloneMode: async (): Promise<{ user: User }> => {
+    setBrowserStandaloneMode(true);
+    return { user: localStandaloneApi.getUser() };
+  },
+
+  login: (email: string, password: string) => {
+    setBrowserStandaloneMode(false);
+    return requestJson<{ user: User }>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
-    }),
+    });
+  },
   register: (
     email: string,
     displayName: string,
     password: string,
     inviteToken?: string
-  ) =>
-    requestJson<{ user: User }>("/api/auth/register", {
+  ) => {
+    setBrowserStandaloneMode(false);
+    return requestJson<{ user: User }>("/api/auth/register", {
       method: "POST",
       body: JSON.stringify({
         email,
@@ -66,16 +127,31 @@ export const api = {
         password,
         ...(inviteToken ? { inviteToken } : {}),
       }),
-    }),
-  logout: () => requestJson<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
+    });
+  },
+  logout: async () => {
+    if (isBrowserStandaloneMode()) {
+      setBrowserStandaloneMode(false);
+      return { ok: true };
+    }
+    return requestJson<{ ok: boolean }>("/api/auth/logout", { method: "POST" });
+  },
 
-  listWorkspaces: () =>
-    requestJson<{ workspaces: WorkspaceWithRole[] }>("/api/workspaces"),
-  createWorkspace: (name: string) =>
-    requestJson<{ workspace: WorkspaceWithRole }>("/api/workspaces", {
+  listWorkspaces: async () => {
+    if (isBrowserStandaloneMode()) {
+      return { workspaces: localStandaloneApi.listWorkspaces() };
+    }
+    return requestJson<{ workspaces: WorkspaceWithRole[] }>("/api/workspaces");
+  },
+  createWorkspace: async (name: string) => {
+    if (isBrowserStandaloneMode()) {
+      return { workspace: localStandaloneApi.createWorkspace(name) };
+    }
+    return requestJson<{ workspace: WorkspaceWithRole }>("/api/workspaces", {
       method: "POST",
       body: JSON.stringify({ name }),
-    }),
+    });
+  },
   createInvite: (workspaceId: string, role: Exclude<Role, "OWNER">) =>
     requestJson<{ invite: { token: string; role: Role; expiresAt: number } }>(
       `/api/workspaces/${workspaceId}/invites`,
@@ -86,10 +162,26 @@ export const api = {
       `/api/invites/${encodeURIComponent(token)}/accept`,
       { method: "POST" }
     ),
-  listMembers: (workspaceId: string) =>
-    requestJson<{ members: WorkspaceMember[] }>(
+  listMembers: async (workspaceId: string) => {
+    if (isBrowserStandaloneMode()) {
+      const u = localStandaloneApi.getUser();
+      return {
+        members: [
+          {
+            userId: u.id,
+            email: u.email,
+            displayName: u.displayName,
+            avatarColor: u.avatarColor,
+            role: "OWNER" as Role,
+            joinedAt: Date.now(),
+          },
+        ] as WorkspaceMember[],
+      };
+    }
+    return requestJson<{ members: WorkspaceMember[] }>(
       `/api/workspaces/${workspaceId}/members`
-    ),
+    );
+  },
   updateMemberRole: (
     workspaceId: string,
     userId: string,
@@ -104,8 +196,9 @@ export const api = {
       `/api/workspaces/${workspaceId}/members/${userId}`,
       { method: "DELETE" }
     ),
-  listInvites: (workspaceId: string) =>
-    requestJson<{
+  listInvites: async (workspaceId: string) => {
+    if (isBrowserStandaloneMode()) return { invites: [] };
+    return requestJson<{
       invites: Array<{
         token: string;
         role: Role;
@@ -113,46 +206,73 @@ export const api = {
         maxUses: number;
         useCount: number;
       }>;
-    }>(`/api/workspaces/${workspaceId}/invites`),
+    }>(`/api/workspaces/${workspaceId}/invites`);
+  },
   revokeInvite: (workspaceId: string, token: string) =>
     requestJson<{ revoked: string }>(
       `/api/workspaces/${workspaceId}/invites/${encodeURIComponent(token)}`,
       { method: "DELETE" }
     ),
 
-  listSnapshots: (workspaceId: string, relPath: string) =>
-    requestJson<{ snapshots: DocumentSnapshotMeta[] }>(
+  listSnapshots: async (workspaceId: string, relPath: string) => {
+    if (isBrowserStandaloneMode()) {
+      return { snapshots: localStandaloneApi.listSnapshots(workspaceId, relPath) };
+    }
+    return requestJson<{ snapshots: DocumentSnapshotMeta[] }>(
       `/api/workspaces/${workspaceId}/snapshots?path=${encodeURIComponent(relPath)}`
-    ),
-  createRevision: (workspaceId: string, path: string, message: string) =>
-    requestJson<{ revision: DocumentSnapshotMeta }>(
+    );
+  },
+  createRevision: async (workspaceId: string, path: string, message: string) => {
+    if (isBrowserStandaloneMode()) {
+      return {
+        revision: await localStandaloneApi.createRevision(workspaceId, path, message),
+      };
+    }
+    return requestJson<{ revision: DocumentSnapshotMeta }>(
       `/api/workspaces/${workspaceId}/revisions`,
       { method: "POST", body: JSON.stringify({ path, message }) }
-    ),
-  getSnapshotDetail: (workspaceId: string, snapshotId: string) =>
-    requestJson<{
+    );
+  },
+  getSnapshotDetail: async (workspaceId: string, snapshotId: string) => {
+    if (isBrowserStandaloneMode()) {
+      return localStandaloneApi.getSnapshotDetail(workspaceId, snapshotId);
+    }
+    return requestJson<{
       snapshot: DocumentSnapshotMeta;
       content: string;
       diffAgainstCurrent: Array<{ type: "context" | "add" | "del"; line: string }>;
-    }>(`/api/workspaces/${workspaceId}/snapshots/${snapshotId}`),
-  restoreSnapshot: (workspaceId: string, snapshotId: string) =>
-    requestJson<{ restoredPath: string; content: string; revisionId: string }>(
+    }>(`/api/workspaces/${workspaceId}/snapshots/${snapshotId}`);
+  },
+  restoreSnapshot: async (workspaceId: string, snapshotId: string) => {
+    if (isBrowserStandaloneMode()) {
+      return localStandaloneApi.restoreSnapshot(workspaceId, snapshotId);
+    }
+    return requestJson<{ restoredPath: string; content: string; revisionId: string }>(
       `/api/workspaces/${workspaceId}/snapshots/${snapshotId}/restore`,
       { method: "POST" }
-    ),
+    );
+  },
 
-  listComments: (workspaceId: string, relPath: string) =>
-    requestJson<{ threads: CommentThread[] }>(
+  listComments: async (workspaceId: string, relPath: string) => {
+    if (isBrowserStandaloneMode()) {
+      return { threads: localStandaloneApi.listComments(workspaceId, relPath) };
+    }
+    return requestJson<{ threads: CommentThread[] }>(
       `/api/workspaces/${workspaceId}/comments?path=${encodeURIComponent(relPath)}`
-    ),
-  createComment: (
+    );
+  },
+  createComment: async (
     workspaceId: string,
     payload: { path: string; anchorLine: number; anchorQuote: string; body: string }
-  ) =>
-    requestJson<{ thread: CommentThread }>(
+  ) => {
+    if (isBrowserStandaloneMode()) {
+      return { thread: localStandaloneApi.createComment(workspaceId, payload) };
+    }
+    return requestJson<{ thread: CommentThread }>(
       `/api/workspaces/${workspaceId}/comments`,
       { method: "POST", body: JSON.stringify(payload) }
-    ),
+    );
+  },
   replyComment: (workspaceId: string, threadId: string, body: string) =>
     requestJson<{ message: CommentMessage }>(
       `/api/workspaces/${workspaceId}/comments/${threadId}/reply`,
@@ -169,48 +289,91 @@ export const api = {
       { method: "DELETE" }
     ),
 
-  listFiles: (workspaceId: string) =>
-    requestJson<{ files: FileTreeItem[] }>(`/api/workspaces/${workspaceId}/files`),
-  readFile: (workspaceId: string, relPath: string) =>
-    requestJson<{ path: string; content: string }>(
+  listFiles: async (workspaceId: string) => {
+    if (isBrowserStandaloneMode()) {
+      return { files: localStandaloneApi.listFiles(workspaceId) };
+    }
+    return requestJson<{ files: FileTreeItem[] }>(`/api/workspaces/${workspaceId}/files`);
+  },
+  readFile: async (workspaceId: string, relPath: string) => {
+    if (isBrowserStandaloneMode()) {
+      return {
+        path: relPath,
+        content: localStandaloneApi.readFile(workspaceId, relPath),
+      };
+    }
+    return requestJson<{ path: string; content: string }>(
       `/api/workspaces/${workspaceId}/files/content?path=${encodeURIComponent(relPath)}`
-    ),
-  writeFile: (
+    );
+  },
+  writeFile: async (
     workspaceId: string,
     payload: { path: string; content?: string; isDir?: boolean; renameFrom?: string }
-  ) =>
-    requestJson<{ path: string }>(`/api/workspaces/${workspaceId}/files`, {
+  ) => {
+    if (isBrowserStandaloneMode()) {
+      localStandaloneApi.writeFile(workspaceId, payload);
+      return { path: payload.path };
+    }
+    return requestJson<{ path: string }>(`/api/workspaces/${workspaceId}/files`, {
       method: "POST",
       body: JSON.stringify(payload),
-    }),
-  deleteFile: (workspaceId: string, relPath: string) =>
-    requestJson<{ deleted: string }>(
+    });
+  },
+  deleteFile: async (workspaceId: string, relPath: string) => {
+    if (isBrowserStandaloneMode()) {
+      localStandaloneApi.deleteFile(workspaceId, relPath);
+      return { deleted: relPath };
+    }
+    return requestJson<{ deleted: string }>(
       `/api/workspaces/${workspaceId}/files?path=${encodeURIComponent(relPath)}`,
       { method: "DELETE" }
-    ),
+    );
+  },
 
-  execute: (
+  execute: async (
     workspaceId: string,
     payload: { engine: ExecuteEngine; code: string; chunkId?: string }
-  ) =>
-    requestJson<ExecuteResponse & { env?: EnvVariable[] }>(
+  ) => {
+    if (isBrowserStandaloneMode()) {
+      return {
+        engine: payload.engine,
+        ok: false,
+        stdout: "",
+        stderr:
+          "Server kernel execution is disabled in Browser Standalone Mode. Connect to a self-hosted Imladris on Web server or use Imladris Desktop to run R/Python.",
+        plots: [],
+        durationMs: 0,
+        chunkId: payload.chunkId,
+      };
+    }
+    return requestJson<ExecuteResponse & { env?: EnvVariable[] }>(
       `/api/workspaces/${workspaceId}/execute`,
       { method: "POST", body: JSON.stringify(payload) }
-    ),
-  restartKernel: (workspaceId: string) =>
-    requestJson<{ ok: boolean }>(`/api/workspaces/${workspaceId}/restart-kernel`, {
+    );
+  },
+  restartKernel: async (workspaceId: string) => {
+    if (isBrowserStandaloneMode()) return { ok: true };
+    return requestJson<{ ok: boolean }>(`/api/workspaces/${workspaceId}/restart-kernel`, {
       method: "POST",
-    }),
-  getEnvironment: (workspaceId: string) =>
-    requestJson<{ variables: EnvVariable[] }>(
+    });
+  },
+  getEnvironment: async (workspaceId: string) => {
+    if (isBrowserStandaloneMode()) return { variables: [] };
+    return requestJson<{ variables: EnvVariable[] }>(
       `/api/workspaces/${workspaceId}/environment`
-    ),
+    );
+  },
 
-  exportDocument: (workspaceId: string, path: string, format: ExportFormat) =>
-    requestJson<{ outputRelPath: string; sizeBytes: number }>(
+  exportDocument: async (workspaceId: string, path: string, format: ExportFormat) => {
+    if (isBrowserStandaloneMode()) {
+      localStandaloneApi.downloadExport(workspaceId, path, format);
+      return { outputRelPath: path, sizeBytes: 0 };
+    }
+    return requestJson<{ outputRelPath: string; sizeBytes: number }>(
       `/api/workspaces/${workspaceId}/export`,
       { method: "POST", body: JSON.stringify({ path, format }) }
-    ),
+    );
+  },
 
   resolveCitation: (id: string) =>
     requestJson<{
@@ -231,6 +394,8 @@ export const api = {
       body: JSON.stringify({ messages, provider, model }),
     }),
 
-  listPlugins: () =>
-    requestJson<{ plugins: CommunityPluginEntry[] }>("/api/plugins/registry"),
+  listPlugins: async () => {
+    if (isBrowserStandaloneMode()) return { plugins: [] };
+    return requestJson<{ plugins: CommunityPluginEntry[] }>("/api/plugins/registry");
+  },
 };

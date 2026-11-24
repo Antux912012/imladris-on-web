@@ -13,6 +13,8 @@ import { HocuspocusProvider } from "@hocuspocus/provider";
 import { yCollab } from "y-codemirror.next";
 import * as Y from "yjs";
 import { queryCompletions } from "@imladris/shared";
+import { getConfiguredServerUrl, isBrowserStandaloneMode } from "../lib/api";
+import { localStandaloneApi } from "../lib/localStore";
 import { useWorkspaceStore } from "../state/workspaceStore";
 
 export function CollabEditor() {
@@ -34,48 +36,9 @@ export function CollabEditor() {
     const host = containerRef.current;
     if (!host || !activeWorkspace || !activeFilePath || !user) return;
 
-    const ydoc = new Y.Doc();
-    const yText = ydoc.getText("codemirror");
-    const undoManager = new Y.UndoManager(yText);
-
-    const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${wsProto}//${window.location.host}/ws/collab/${activeWorkspace.id}/${encodeURIComponent(
-      activeFilePath
-    )}`;
-
-    const provider = new HocuspocusProvider({
-      url: wsUrl,
-      name: `${activeWorkspace.id}/${activeFilePath}`,
-      document: ydoc,
-    });
-
-    provider.setAwarenessField("user", {
-      name: user.displayName,
-      color: user.avatarColor,
-    });
-
-    provider.on("status", (evt: { status: string }) => {
-      setWsConnected(evt.status === "connected");
-    });
-
-    const updatePeers = () => {
-      const states = provider.awareness?.getStates();
-      if (!states) return;
-      const peers: Array<{ clientId: number; name: string; color: string }> = [];
-      states.forEach((st, clientId) => {
-        const u = st.user as { name?: string; color?: string } | undefined;
-        if (u?.name) {
-          peers.push({
-            clientId,
-            name: u.name,
-            color: u.color ?? "#3584e4",
-          });
-        }
-      });
-      setCollabPeers(peers);
-    };
-
-    provider.awareness?.on("change", updatePeers);
+    const standalone = isBrowserStandaloneMode();
+    const readOnly =
+      activeWorkspace.role === "VIEWER" || activeWorkspace.role === "REVIEWER";
 
     const completionSource = (context: CompletionContext) => {
       const word = context.matchBefore(/[\w.@$]+/);
@@ -115,8 +78,109 @@ export function CollabEditor() {
     };
 
     const langExt = activeFilePath.endsWith(".py") ? python() : markdown();
-    const readOnly =
-      activeWorkspace.role === "VIEWER" || activeWorkspace.role === "REVIEWER";
+
+    if (standalone) {
+      const initialDoc = localStandaloneApi.readFile(
+        activeWorkspace.id,
+        activeFilePath
+      );
+      const state = EditorState.create({
+        doc: initialDoc,
+        extensions: [
+          lineNumbers(),
+          history(),
+          keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+          langExt,
+          autocompletion({ override: [completionSource] }),
+          EditorState.readOnly.of(readOnly),
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) {
+              const nextText = update.state.doc.toString();
+              setDocContent(nextText);
+              localStandaloneApi.writeFile(activeWorkspace.id, {
+                path: activeFilePath,
+                content: nextText,
+              });
+            }
+          }),
+        ],
+      });
+
+      const view = new EditorView({ state, parent: host });
+      viewRef.current = view;
+      setDocContent(initialDoc);
+      setWsConnected(false);
+
+      setEditorInsertCallback((snippet: string) => {
+        if (readOnly) return;
+        const sel = view.state.selection.main;
+        view.dispatch({
+          changes: { from: sel.from, to: sel.to, insert: snippet },
+        });
+        view.focus();
+      });
+
+      setEditorReplaceCallback((content: string) => {
+        if (readOnly) return;
+        view.dispatch({
+          changes: { from: 0, to: view.state.doc.length, insert: content },
+        });
+        setDocContent(content);
+      });
+
+      return () => {
+        setEditorInsertCallback(null);
+        setEditorReplaceCallback(null);
+        view.destroy();
+        viewRef.current = null;
+      };
+    }
+
+    const ydoc = new Y.Doc();
+    const yText = ydoc.getText("codemirror");
+    const undoManager = new Y.UndoManager(yText);
+
+    const configuredBase = getConfiguredServerUrl();
+    const wsTarget = configuredBase
+      ? configuredBase.replace(/^http/i, "ws")
+      : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`;
+    const wsUrl = `${wsTarget}/ws/collab/${activeWorkspace.id}/${encodeURIComponent(
+      activeFilePath
+    )}`;
+
+    const provider = new HocuspocusProvider({
+      url: wsUrl,
+      name: `${activeWorkspace.id}/${activeFilePath}`,
+      document: ydoc,
+    });
+
+    provider.setAwarenessField("user", {
+      name: user.displayName,
+      color: user.avatarColor,
+    });
+
+    provider.on("status", (evt: { status: string }) => {
+      setWsConnected(evt.status === "connected");
+    });
+
+    const updatePeers = () => {
+      const states = provider.awareness?.getStates();
+      if (!states) return;
+      const peers: Array<{ clientId: number; name: string; color: string }> = [];
+      states.forEach((st, clientId) => {
+        const u = st.user as { name?: string; color?: string } | undefined;
+        if (u?.name) {
+          peers.push({
+            clientId,
+            name: u.name,
+            color: u.color ?? "#3584e4",
+          });
+        }
+      });
+      setCollabPeers(peers);
+    };
+
+    provider.awareness?.on("change", updatePeers);
 
     const state = EditorState.create({
       doc: yText.toString(),
