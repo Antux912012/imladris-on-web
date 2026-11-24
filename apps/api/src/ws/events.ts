@@ -9,42 +9,63 @@ import type { AppDb } from "../db/client.js";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "../auth/jwt.js";
 import { getMemberRole, hasPermission } from "../auth/rbac.js";
 
-export class WorkspaceEventBus {
-  private readonly subscribers = new Map<string, Set<WebSocket>>();
+interface Subscriber {
+  socket: WebSocket;
+  userId: string;
+}
 
-  subscribe(workspaceId: string, socket: WebSocket): () => void {
+export class WorkspaceEventBus {
+  private readonly subscribers = new Map<string, Set<Subscriber>>();
+
+  subscribe(workspaceId: string, socket: WebSocket, userId = ""): () => void {
     let set = this.subscribers.get(workspaceId);
     if (!set) {
       set = new Set();
       this.subscribers.set(workspaceId, set);
     }
-    set.add(socket);
+    const entry: Subscriber = { socket, userId };
+    set.add(entry);
 
     return () => {
       const current = this.subscribers.get(workspaceId);
       if (!current) return;
-      current.delete(socket);
+      current.delete(entry);
       if (current.size === 0) {
         this.subscribers.delete(workspaceId);
       }
     };
   }
 
-  publish(workspaceId: string, event: WorkspaceEvent): void {
+  publish(workspaceId: string, event: WorkspaceEvent, targetUserId?: string): void {
     const set = this.subscribers.get(workspaceId);
     if (!set || set.size === 0) return;
     const payload = JSON.stringify(event);
-    for (const sock of set) {
-      if (sock.readyState === 1) {
-        sock.send(payload);
+    for (const sub of set) {
+      if (targetUserId && sub.userId !== targetUserId) continue;
+      if (sub.socket.readyState === 1) {
+        sub.socket.send(payload);
       }
+    }
+  }
+
+  disconnectUser(workspaceId: string, userId: string): void {
+    const set = this.subscribers.get(workspaceId);
+    if (!set) return;
+    for (const sub of [...set]) {
+      if (sub.userId === userId) {
+        sub.socket.close(4003, "Workspace permissions changed");
+        set.delete(sub);
+      }
+    }
+    if (set.size === 0) {
+      this.subscribers.delete(workspaceId);
     }
   }
 
   closeAll(): void {
     for (const set of this.subscribers.values()) {
-      for (const sock of set) {
-        sock.close();
+      for (const sub of set) {
+        sub.socket.close();
       }
     }
     this.subscribers.clear();
@@ -75,11 +96,17 @@ export async function registerEventRoutes(
         if (!role || !hasPermission(role, "read")) {
           return reply.code(403).send({ error: "Forbidden" });
         }
+        (req as unknown as { wsUserId?: string }).wsUserId = payload.sub;
       },
     },
     (socket, req) => {
       const { workspaceId } = req.params as { workspaceId: string };
-      const unsubscribe = bus.subscribe(workspaceId, socket as unknown as WebSocket);
+      const userId = (req as unknown as { wsUserId?: string }).wsUserId ?? "";
+      const unsubscribe = bus.subscribe(
+        workspaceId,
+        socket as unknown as WebSocket,
+        userId
+      );
       socket.on("close", unsubscribe);
       socket.on("error", unsubscribe);
     }

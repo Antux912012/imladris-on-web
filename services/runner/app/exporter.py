@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import json
 import shutil
 from pathlib import Path
@@ -78,16 +79,21 @@ async def export_document(
             cwd=str(workspace_dir),
             env=sanitize_env(workspace_dir),
         )
-        _, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=60)
+        try:
+            _, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=60)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise HTTPException(status_code=504, detail="Pandoc export timed out")
         if proc.returncode != 0:
             raise HTTPException(
                 status_code=500,
-                detail=f"Pandoc export failed: {stderr_b.decode('utf-8', errors='replace')}",
+                detail=f"Pandoc export failed: {stderr_b.decode('utf-8', errors='replace')[:1000]}",
             )
     elif export_format == "html":
-        text = src.read_text(encoding="utf-8")
+        text = html.escape(src.read_text(encoding="utf-8"))
         out_path.write_text(
-            f"<!doctype html><html><body><pre>{text}</pre></body></html>",
+            f"<!doctype html><html><head><meta charset='utf-8'></head><body><pre>{text}</pre></body></html>",
             encoding="utf-8",
         )
     else:

@@ -68,17 +68,18 @@ function renderMathAndMarkdown(raw: string): string {
 
 export function LivePreviewPane() {
   const { docContent, activeFilePath } = useWorkspaceStore();
+  const isRawHtml = Boolean(activeFilePath?.toLowerCase().endsWith(".html"));
   const srcDoc = useMemo(() => {
-    if (activeFilePath?.toLowerCase().endsWith(".html")) {
+    if (isRawHtml) {
       return docContent;
     }
     return renderMathAndMarkdown(docContent);
-  }, [docContent, activeFilePath]);
+  }, [docContent, isRawHtml]);
 
   return (
     <iframe
       title="Imladris Live Preview"
-      sandbox="allow-scripts"
+      sandbox={isRawHtml ? "allow-scripts" : ""}
       srcDoc={srcDoc}
       className="h-full w-full border-0 bg-white"
     />

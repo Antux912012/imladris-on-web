@@ -6,6 +6,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { and, eq, lt, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import type { Hocuspocus } from "@hocuspocus/server";
 import { z } from "zod";
 import { KernelModeSchema, RoleSchema } from "@imladris/shared";
 import type { AppConfig } from "../config.js";
@@ -17,7 +18,9 @@ import {
   workspaceMembers,
   workspaces,
 } from "../db/schema.js";
-import { requireAuth, requireWorkspacePermission } from "../auth/rbac.js";
+import { requireWorkspacePermission, requireAuth } from "../auth/rbac.js";
+import { disconnectUserFromCollab } from "../collab/hocuspocus.js";
+import type { WorkspaceEventBus } from "../ws/events.js";
 
 const CreateWorkspaceBody = z.object({
   name: z.string().min(1).max(120),
@@ -64,7 +67,9 @@ print("Sum:", sum(x))
 export async function registerWorkspaceRoutes(
   app: FastifyInstance,
   db: AppDb,
-  config: AppConfig
+  config: AppConfig,
+  bus?: WorkspaceEventBus,
+  hocuspocus?: Hocuspocus
 ): Promise<void> {
   app.get("/api/workspaces", async (req, reply) => {
     const user = await requireAuth(req, reply, db, config);
@@ -359,6 +364,9 @@ export async function registerWorkspaceRoutes(
       createdAt: Date.now(),
     });
 
+    bus?.disconnectUser(id, userId);
+    if (hocuspocus) disconnectUserFromCollab(hocuspocus, id, userId);
+
     return reply.send({ member: updated[0] });
   });
 
@@ -400,6 +408,9 @@ export async function registerWorkspaceRoutes(
       payloadJson: JSON.stringify({ targetUserId: userId }),
       createdAt: Date.now(),
     });
+
+    bus?.disconnectUser(id, userId);
+    if (hocuspocus) disconnectUserFromCollab(hocuspocus, id, userId);
 
     return reply.send({ removedUserId: userId });
   });

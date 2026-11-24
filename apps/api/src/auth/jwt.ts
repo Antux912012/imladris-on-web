@@ -4,6 +4,7 @@
 import { SignJWT, jwtVerify } from "jose";
 
 export const SESSION_COOKIE_NAME = "imladris_session";
+const TEXT_ENCODER = new TextEncoder();
 
 export interface SessionPayload {
   sub: string;
@@ -16,7 +17,7 @@ export async function signSessionToken(
   secret: string,
   expiresIn = "7d"
 ): Promise<string> {
-  const key = new TextEncoder().encode(secret);
+  const key = TEXT_ENCODER.encode(secret);
   return new SignJWT({
     email: payload.email,
     displayName: payload.displayName,
@@ -33,7 +34,7 @@ export async function verifySessionToken(
   secret: string
 ): Promise<SessionPayload | null> {
   try {
-    const key = new TextEncoder().encode(secret);
+    const key = TEXT_ENCODER.encode(secret);
     const { payload } = await jwtVerify(token, key, { algorithms: ["HS256"] });
     if (
       typeof payload.sub !== "string" ||

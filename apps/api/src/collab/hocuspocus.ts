@@ -111,6 +111,23 @@ export function createHocuspocusServer(
   });
 }
 
+export function disconnectUserFromCollab(
+  hocuspocus: Hocuspocus,
+  workspaceId: string,
+  userId: string
+): void {
+  const prefix = `${workspaceId}/`;
+  for (const [docName, document] of hocuspocus.documents.entries()) {
+    if (!docName.startsWith(prefix)) continue;
+    for (const conn of document.connections.values()) {
+      const ctx = conn.connection.context as Partial<CollabContext> | undefined;
+      if (ctx?.userId === userId) {
+        conn.connection.close({ code: 4003, reason: "Workspace permissions changed" });
+      }
+    }
+  }
+}
+
 export async function registerCollabRoutes(
   app: FastifyInstance,
   hocuspocus: Hocuspocus

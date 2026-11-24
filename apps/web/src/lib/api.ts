@@ -52,10 +52,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ email, password }),
     }),
-  register: (email: string, displayName: string, password: string) =>
+  register: (
+    email: string,
+    displayName: string,
+    password: string,
+    inviteToken?: string
+  ) =>
     requestJson<{ user: User }>("/api/auth/register", {
       method: "POST",
-      body: JSON.stringify({ email, displayName, password }),
+      body: JSON.stringify({
+        email,
+        displayName,
+        password,
+        ...(inviteToken ? { inviteToken } : {}),
+      }),
     }),
   logout: () => requestJson<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
 

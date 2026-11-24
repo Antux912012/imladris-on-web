@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { searchKeymap } from "@codemirror/search";
 import { markdown } from "@codemirror/lang-markdown";
 import { python } from "@codemirror/lang-python";
 import { autocompletion, type CompletionContext } from "@codemirror/autocomplete";
@@ -122,7 +123,7 @@ export function CollabEditor() {
       extensions: [
         lineNumbers(),
         history(),
-        keymap.of([...defaultKeymap, ...historyKeymap]),
+        keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
         langExt,
         autocompletion({ override: [completionSource] }),
         yCollab(yText, provider.awareness, { undoManager }),

@@ -35,9 +35,15 @@ export async function registerCitationRoutes(
     const isArxiv = /^\d{4}\.\d{4,5}(v\d+)?$/i.test(cleaned) || /^[a-z-]+\/\d{7}$/i.test(cleaned);
 
     if (isArxiv) {
-      const resp = await fetch(
-        `https://export.arxiv.org/api/query?id_list=${encodeURIComponent(cleaned)}`
-      );
+      let resp: Response;
+      try {
+        resp = await fetch(
+          `https://export.arxiv.org/api/query?id_list=${encodeURIComponent(cleaned)}`,
+          { signal: AbortSignal.timeout(10000) }
+        );
+      } catch {
+        return reply.code(502).send({ error: "arXiv lookup timed out or unreachable" });
+      }
       if (!resp.ok) {
         return reply.code(502).send({ error: "arXiv lookup failed" });
       }
@@ -66,9 +72,15 @@ export async function registerCitationRoutes(
       return reply.send({ key, title, authors: authorMatches, year, bibtex });
     }
 
-    const doiResp = await fetch(
-      `https://api.crossref.org/works/${encodeURIComponent(cleaned)}`
-    );
+    let doiResp: Response;
+    try {
+      doiResp = await fetch(
+        `https://api.crossref.org/works/${encodeURIComponent(cleaned)}`,
+        { signal: AbortSignal.timeout(10000) }
+      );
+    } catch {
+      return reply.code(502).send({ error: "Crossref lookup timed out or unreachable" });
+    }
     if (doiResp.status === 404) {
       return reply.code(404).send({ error: "DOI not found" });
     }

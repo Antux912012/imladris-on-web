@@ -64,16 +64,26 @@ export function App() {
     if (!activeWorkspace) return;
     let cancelled = false;
 
-    api.listFiles(activeWorkspace.id).then((res) => {
-      if (cancelled) return;
-      setFiles(res.files);
-      const firstFile = res.files.find((f) => !f.isDir);
-      if (firstFile) selectFile(firstFile.relPath);
-    });
+    api
+      .listFiles(activeWorkspace.id)
+      .then((res) => {
+        if (cancelled) return;
+        setFiles(res.files);
+        const firstFile = res.files.find((f) => !f.isDir);
+        if (firstFile) selectFile(firstFile.relPath);
+      })
+      .catch(() => {
+        if (!cancelled) appendConsole("stderr", "Failed to load workspace file tree.");
+      });
 
-    api.getEnvironment(activeWorkspace.id).then((res) => {
-      if (!cancelled) setEnvVariables(res.variables);
-    });
+    api
+      .getEnvironment(activeWorkspace.id)
+      .then((res) => {
+        if (!cancelled) setEnvVariables(res.variables);
+      })
+      .catch(() => {
+        if (!cancelled) setEnvVariables([]);
+      });
 
     const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
     const sock = new WebSocket(

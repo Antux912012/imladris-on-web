@@ -88,17 +88,29 @@ export interface FileEntry {
   languageId?: string;
 }
 
-async function listTree(baseDir: string, currentDir: string): Promise<FileEntry[]> {
+async function listTree(
+  baseDir: string,
+  currentDir: string,
+  depth = 0
+): Promise<FileEntry[]> {
+  if (depth > 16) return [];
   const entries = await fs.readdir(currentDir, { withFileTypes: true });
   const results: FileEntry[] = [];
 
   for (const entry of entries) {
-    if (entry.name.startsWith(".imladris-tmp") || entry.name === ".git") continue;
+    if (
+      entry.name.startsWith(".imladris-tmp") ||
+      entry.name === ".git" ||
+      entry.isSymbolicLink()
+    ) {
+      continue;
+    }
     const full = path.join(currentDir, entry.name);
-    const relPath = path.relative(baseDir, full).split(path.sep).join("/");
-    const stat = await fs.stat(full);
+    const stat = await fs.lstat(full);
+    if (stat.isSymbolicLink()) continue;
 
-    if (entry.isDirectory()) {
+    const relPath = path.relative(baseDir, full).split(path.sep).join("/");
+    if (stat.isDirectory()) {
       results.push({
         relPath,
         name: entry.name,
@@ -106,9 +118,9 @@ async function listTree(baseDir: string, currentDir: string): Promise<FileEntry[
         size: 0,
         mtimeMs: stat.mtimeMs,
       });
-      const children = await listTree(baseDir, full);
+      const children = await listTree(baseDir, full, depth + 1);
       results.push(...children);
-    } else {
+    } else if (stat.isFile()) {
       const profile = fromFilename(entry.name);
       results.push({
         relPath,

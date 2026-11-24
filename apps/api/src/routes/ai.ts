@@ -51,12 +51,11 @@ export async function registerAiRoutes(
             messages: parsed.data.messages,
             stream: false,
           }),
+          signal: AbortSignal.timeout(30000),
         });
         if (!resp.ok) {
-          const text = await resp.text();
           return reply.code(502).send({
-            error: `Local AI provider returned ${resp.status}`,
-            detail: text,
+            error: `Local AI provider returned HTTP ${resp.status}`,
           });
         }
         const data = (await resp.json()) as {
@@ -67,10 +66,9 @@ export async function registerAiRoutes(
           reply: data.message?.content ?? data.response ?? "",
           provider: "local",
         });
-      } catch (err) {
+      } catch {
         return reply.code(502).send({
-          error: "Local Ollama instance unreachable",
-          detail: err instanceof Error ? err.message : String(err),
+          error: "Local Ollama instance unreachable or timed out",
         });
       }
     }

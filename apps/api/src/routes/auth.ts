@@ -52,7 +52,10 @@ export async function registerAuthRoutes(
   db: AppDb,
   config: AppConfig
 ): Promise<void> {
-  app.post("/api/auth/register", async (req, reply) => {
+  app.post(
+    "/api/auth/register",
+    { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
+    async (req, reply) => {
     const parsed = RegisterBody.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: "Invalid registration payload" });
@@ -139,7 +142,10 @@ export async function registerAuthRoutes(
     });
   });
 
-  app.post("/api/auth/login", async (req, reply) => {
+  app.post(
+    "/api/auth/login",
+    { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
+    async (req, reply) => {
     const parsed = LoginBody.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: "Invalid login payload" });

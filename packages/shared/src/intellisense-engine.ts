@@ -61,13 +61,16 @@ const QUARTO_SNIPPETS: CompletionItem[] = [
   { label: "::: {.callout-note}", insertText: "::: {.callout-note}\n\n:::", kind: "snippet", detail: "Quarto callout block" },
 ];
 
+const DOLLAR_COL_RE = /([A-Za-z_][A-Za-z0-9_.]*)\$([A-Za-z0-9_.]*)$/;
+const DOT_COL_RE = /([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z0-9_]*)$/;
+
 export function queryCompletions(query: CompletionQuery): CompletionItem[] {
   const results: CompletionItem[] = [];
   const env = query.environment ?? [];
   const pfx = query.prefix.toLowerCase();
 
   // 1. Live DataFrame column completion (`df$col` in R or `df.` in Python)
-  const dollarMatch = /([A-Za-z_][A-Za-z0-9_.]*)\$([A-Za-z0-9_.]*)$/.exec(query.lineBeforeCursor);
+  const dollarMatch = DOLLAR_COL_RE.exec(query.lineBeforeCursor);
   if (dollarMatch) {
     const dfName = dollarMatch[1]!;
     const colPrefix = dollarMatch[2]!.toLowerCase();
@@ -82,7 +85,7 @@ export function queryCompletions(query: CompletionQuery): CompletionItem[] {
     }
   }
 
-  const dotMatch = /([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z0-9_]*)$/.exec(query.lineBeforeCursor);
+  const dotMatch = DOT_COL_RE.exec(query.lineBeforeCursor);
   if (dotMatch && query.language === "python") {
     const varName = dotMatch[1]!;
     const attrPrefix = dotMatch[2]!.toLowerCase();
@@ -96,9 +99,9 @@ export function queryCompletions(query: CompletionQuery): CompletionItem[] {
     }
   }
 
-  // 2. Quarto cross-references (@fig-, @tbl-, @sec-) extracted from current document
+  // 2. Quarto cross-references (@fig-, @tbl-, @sec-, @eq-) extracted from current document
   if (query.lineBeforeCursor.includes("@")) {
-    const refRe = /#(fig|tbl|sec)-([A-Za-z0-9_-]+)/g;
+    const refRe = /#(fig|tbl|sec|eq)-([A-Za-z0-9_-]+)/g;
     let m: RegExpExecArray | null;
     const seen = new Set<string>();
     while ((m = refRe.exec(query.documentText)) !== null) {

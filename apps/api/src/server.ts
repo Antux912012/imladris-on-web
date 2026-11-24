@@ -53,6 +53,13 @@ export async function buildApp(overrides: Partial<AppConfig> = {}): Promise<Buil
   });
   await app.register(fastifyWebsocket);
 
+  app.addHook("onSend", async (_req, reply, payload) => {
+    reply.header("X-Content-Type-Options", "nosniff");
+    reply.header("X-Frame-Options", "DENY");
+    reply.header("Referrer-Policy", "no-referrer");
+    return payload;
+  });
+
   app.get("/health", async () => ({
     ok: true,
     service: "imladris-api",
@@ -61,7 +68,7 @@ export async function buildApp(overrides: Partial<AppConfig> = {}): Promise<Buil
   }));
 
   await registerAuthRoutes(app, db, config);
-  await registerWorkspaceRoutes(app, db, config);
+  await registerWorkspaceRoutes(app, db, config, eventBus, hocuspocus);
   await registerFileRoutes(app, db, config);
   await registerExecuteRoutes(app, db, config, eventBus);
   await registerExportRoutes(app, db, config);

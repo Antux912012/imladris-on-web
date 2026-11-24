@@ -10,6 +10,8 @@ import sys
 import traceback
 from contextlib import redirect_stderr, redirect_stdout
 
+_MAX_OUTPUT_CHARS = 1_000_000
+
 
 def _inspect_ns(ns: dict[str, object]) -> list[dict[str, object]]:
     items: list[dict[str, object]] = []
@@ -62,7 +64,7 @@ def _capture_plots() -> list[str]:
     if plt is None:
         return plots
     try:
-        fig_nums = plt.get_fignums()
+        fig_nums = plt.get_fignums()[:12]
         for num in fig_nums:
             fig = plt.figure(num)
             buf = io.BytesIO()
@@ -75,6 +77,12 @@ def _capture_plots() -> list[str]:
     return plots
 
 
+def _truncate(text: str) -> str:
+    if len(text) <= _MAX_OUTPUT_CHARS:
+        return text
+    return text[:_MAX_OUTPUT_CHARS] + "\n...[output truncated]"
+
+
 def main() -> None:
     ns: dict[str, object] = {"__name__": "__main__"}
     for raw_line in sys.stdin:
@@ -82,12 +90,6 @@ def main() -> None:
         if not line:
             continue
         req = json.loads(line)
-        op = req.get("op")
-        if op == "inspect":
-            sys.stdout.write(json.dumps({"ok": True, "env": _inspect_ns(ns)}) + "\n")
-            sys.stdout.flush()
-            continue
-
         code = str(req.get("code", ""))
         out_buf = io.StringIO()
         err_buf = io.StringIO()
@@ -103,8 +105,8 @@ def main() -> None:
         plots = _capture_plots()
         resp = {
             "ok": ok,
-            "stdout": out_buf.getvalue(),
-            "stderr": err_buf.getvalue(),
+            "stdout": _truncate(out_buf.getvalue()),
+            "stderr": _truncate(err_buf.getvalue()),
             "plots": plots,
             "env": _inspect_ns(ns),
         }

@@ -12,40 +12,60 @@ export function FileTreePane() {
     activeFilePath,
     selectFile,
     setFiles,
+    appendConsole,
   } = useWorkspaceStore();
+
+  const canEdit =
+    activeWorkspace?.role === "OWNER" || activeWorkspace?.role === "EDITOR";
 
   async function refreshFiles() {
     if (!activeWorkspace) return;
-    const res = await api.listFiles(activeWorkspace.id);
-    setFiles(res.files);
+    try {
+      const res = await api.listFiles(activeWorkspace.id);
+      setFiles(res.files);
+    } catch (err) {
+      appendConsole("stderr", err instanceof Error ? err.message : "Failed to list files");
+    }
   }
 
   async function handleNewFile() {
-    if (!activeWorkspace) return;
+    if (!activeWorkspace || !canEdit) return;
     const name = window.prompt("New file path (e.g. notes/draft.qmd):", "untitled.qmd");
     if (!name?.trim()) return;
-    await api.writeFile(activeWorkspace.id, {
-      path: name.trim(),
-      content: `# ${name.trim()}\n\n`,
-    });
-    await refreshFiles();
-    selectFile(name.trim());
+    try {
+      await api.writeFile(activeWorkspace.id, {
+        path: name.trim(),
+        content: `# ${name.trim()}\n\n`,
+      });
+      await refreshFiles();
+      selectFile(name.trim());
+    } catch (err) {
+      appendConsole("stderr", err instanceof Error ? err.message : "Failed to create file");
+    }
   }
 
   async function handleNewFolder() {
-    if (!activeWorkspace) return;
+    if (!activeWorkspace || !canEdit) return;
     const name = window.prompt("New folder path:", "chapters");
     if (!name?.trim()) return;
-    await api.writeFile(activeWorkspace.id, { path: name.trim(), isDir: true });
-    await refreshFiles();
+    try {
+      await api.writeFile(activeWorkspace.id, { path: name.trim(), isDir: true });
+      await refreshFiles();
+    } catch (err) {
+      appendConsole("stderr", err instanceof Error ? err.message : "Failed to create folder");
+    }
   }
 
   async function handleDelete(relPath: string) {
-    if (!activeWorkspace) return;
+    if (!activeWorkspace || !canEdit) return;
     if (!window.confirm(`Delete ${relPath}?`)) return;
-    await api.deleteFile(activeWorkspace.id, relPath);
-    if (activeFilePath === relPath) selectFile(null);
-    await refreshFiles();
+    try {
+      await api.deleteFile(activeWorkspace.id, relPath);
+      if (activeFilePath === relPath) selectFile(null);
+      await refreshFiles();
+    } catch (err) {
+      appendConsole("stderr", err instanceof Error ? err.message : "Failed to delete file");
+    }
   }
 
   return (
@@ -61,24 +81,26 @@ export function FileTreePane() {
         style={{ borderBottom: "1px solid var(--border-subtle)" }}
       >
         <span>Files</span>
-        <div className="flex gap-1">
-          <button
-            type="button"
-            onClick={handleNewFile}
-            title="New File"
-            className="rounded p-1 hover:bg-black/5"
-          >
-            <FilePlus className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={handleNewFolder}
-            title="New Folder"
-            className="rounded p-1 hover:bg-black/5"
-          >
-            <FolderPlus className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        {canEdit && (
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={handleNewFile}
+              title="New File"
+              className="rounded p-1 hover:bg-black/5"
+            >
+              <FilePlus className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleNewFolder}
+              title="New Folder"
+              className="rounded p-1 hover:bg-black/5"
+            >
+              <FolderPlus className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-1.5 space-y-0.5">
@@ -107,14 +129,16 @@ export function FileTreePane() {
                 )}
                 <span className="truncate">{item.name}</span>
               </button>
-              <button
-                type="button"
-                onClick={() => handleDelete(item.relPath)}
-                title="Delete"
-                className="hidden rounded p-0.5 opacity-70 hover:opacity-100 group-hover:inline-flex"
-              >
-                <Trash2 className="h-3 w-3" />
-              </button>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => handleDelete(item.relPath)}
+                  title="Delete"
+                  className="hidden rounded p-0.5 opacity-70 hover:opacity-100 group-hover:inline-flex"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              )}
             </div>
           );
         })}

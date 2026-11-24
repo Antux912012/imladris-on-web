@@ -4,6 +4,13 @@
 {$IMLADRIS_SITE::80} {
 	encode gzip zstd
 
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
 	handle /api/* {
 		reverse_proxy imladris-api:3000
 	}

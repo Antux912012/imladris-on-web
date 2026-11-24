@@ -263,5 +263,31 @@ describe("@imladris/api Core", () => {
       headers: { cookie: ownerCookie },
     });
     expect(delMember.statusCode).toBe(200);
+
+    // Security headers and symlink escape defense
+    const healthRes = await built.app.inject({ method: "GET", url: "/health" });
+    expect(healthRes.headers["x-content-type-options"]).toBe("nosniff");
+    expect(healthRes.headers["x-frame-options"]).toBe("DENY");
+
+    const outsideFile = path.join(tmpRoot, "outside-secret.txt");
+    fs.writeFileSync(outsideFile, "top-secret", "utf8");
+    const linkPath = path.join(tmpRoot, "workspaces", wsId, "leak.txt");
+    fs.symlinkSync(outsideFile, linkPath);
+
+    const symlinkRead = await built.app.inject({
+      method: "GET",
+      url: `/api/workspaces/${wsId}/files/content?path=leak.txt`,
+      headers: { cookie: ownerCookie },
+    });
+    expect(symlinkRead.statusCode).toBe(400);
+
+    const listAfterSymlink = await built.app.inject({
+      method: "GET",
+      url: `/api/workspaces/${wsId}/files`,
+      headers: { cookie: ownerCookie },
+    });
+    expect(
+      listAfterSymlink.json().files.some((f: { relPath: string }) => f.relPath === "leak.txt")
+    ).toBe(false);
   });
 });

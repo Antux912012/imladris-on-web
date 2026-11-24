@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import crypto from "node:crypto";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { AppConfig } from "../config.js";
@@ -78,34 +78,41 @@ export async function registerCommentRoutes(
         )
         .orderBy(asc(commentThreads.anchorLine), desc(commentThreads.createdAt));
 
-      const enriched = await Promise.all(
-        threads.map(async (t) => {
-          const msgs = await db
-            .select({
-              id: commentMessages.id,
-              threadId: commentMessages.threadId,
-              authorId: commentMessages.authorId,
-              authorName: users.displayName,
-              authorColor: users.avatarColor,
-              body: commentMessages.body,
-              createdAt: commentMessages.createdAt,
-            })
-            .from(commentMessages)
-            .leftJoin(users, eq(commentMessages.authorId, users.id))
-            .where(eq(commentMessages.threadId, t.id))
-            .orderBy(asc(commentMessages.createdAt));
+      const threadIds = threads.map((t) => t.id);
+      const allMessages =
+        threadIds.length > 0
+          ? await db
+              .select({
+                id: commentMessages.id,
+                threadId: commentMessages.threadId,
+                authorId: commentMessages.authorId,
+                authorName: users.displayName,
+                authorColor: users.avatarColor,
+                body: commentMessages.body,
+                createdAt: commentMessages.createdAt,
+              })
+              .from(commentMessages)
+              .leftJoin(users, eq(commentMessages.authorId, users.id))
+              .where(inArray(commentMessages.threadId, threadIds))
+              .orderBy(asc(commentMessages.createdAt))
+          : [];
 
-          return {
-            ...t,
-            createdByName: t.createdByName ?? "Unknown",
-            messages: msgs.map((m) => ({
-              ...m,
-              authorName: m.authorName ?? "Unknown",
-              authorColor: m.authorColor ?? "#3584e4",
-            })),
-          };
-        })
-      );
+      const byThread = new Map<string, typeof allMessages>();
+      for (const m of allMessages) {
+        const list = byThread.get(m.threadId);
+        if (list) list.push(m);
+        else byThread.set(m.threadId, [m]);
+      }
+
+      const enriched = threads.map((t) => ({
+        ...t,
+        createdByName: t.createdByName ?? "Unknown",
+        messages: (byThread.get(t.id) ?? []).map((m) => ({
+          ...m,
+          authorName: m.authorName ?? "Unknown",
+          authorColor: m.authorColor ?? "#3584e4",
+        })),
+      }));
 
       return reply.send({ threads: enriched });
     } catch (err) {

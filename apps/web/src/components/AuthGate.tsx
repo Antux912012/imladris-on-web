@@ -14,6 +14,7 @@ export function AuthGate({ onAuthenticated }: Props) {
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteToken, setInviteToken] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -25,7 +26,12 @@ export function AuthGate({ onAuthenticated }: Props) {
       const resp =
         mode === "login"
           ? await api.login(email, password)
-          : await api.register(email, displayName, password);
+          : await api.register(
+              email,
+              displayName,
+              password,
+              inviteToken.trim() || undefined
+            );
       onAuthenticated(resp.user);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
@@ -127,6 +133,25 @@ export function AuthGate({ onAuthenticated }: Props) {
               }}
             />
           </div>
+
+          {mode === "register" && (
+            <div>
+              <label className="mb-1 block text-xs font-medium">
+                Invite Token <span style={{ color: "var(--fg-muted)" }}>(optional, required on invite-only servers)</span>
+              </label>
+              <input
+                type="text"
+                value={inviteToken}
+                onChange={(e) => setInviteToken(e.target.value)}
+                placeholder="Paste workspace invite token if provided"
+                className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                style={{
+                  backgroundColor: "var(--bg-window)",
+                  border: "1px solid var(--border-subtle)",
+                }}
+              />
+            </div>
+          )}
 
           {error && (
             <div className="rounded-lg px-3 py-2 text-xs" style={{ color: "var(--danger)" }}>

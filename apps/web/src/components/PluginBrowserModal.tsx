@@ -14,7 +14,10 @@ export function PluginBrowserModal() {
 
   useEffect(() => {
     if (!showPluginModal) return;
-    api.listPlugins().then((res) => setPlugins(res.plugins));
+    api
+      .listPlugins()
+      .then((res) => setPlugins(res.plugins))
+      .catch(() => setPlugins([]));
   }, [showPluginModal]);
 
   if (!showPluginModal) return null;
@@ -24,11 +27,21 @@ export function PluginBrowserModal() {
       new URL("../workers/pluginWorker.ts", import.meta.url),
       { type: "module" }
     );
+    const timer = window.setTimeout(() => {
+      worker.terminate();
+      setOutputs((prev) => ({ ...prev, [pluginId]: "Plugin timed out (5s limit)." }));
+    }, 5000);
     worker.onmessage = (evt: MessageEvent<{ pluginId: string; summary: string }>) => {
+      window.clearTimeout(timer);
       setOutputs((prev) => ({
         ...prev,
         [evt.data.pluginId]: evt.data.summary,
       }));
+      worker.terminate();
+    };
+    worker.onerror = () => {
+      window.clearTimeout(timer);
+      setOutputs((prev) => ({ ...prev, [pluginId]: "Plugin execution error." }));
       worker.terminate();
     };
     worker.postMessage({ pluginId, documentText: docContent });

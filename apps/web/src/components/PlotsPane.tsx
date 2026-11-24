@@ -22,7 +22,9 @@ export function PlotsPane() {
       className="h-full overflow-y-auto p-3 space-y-3"
       style={{ backgroundColor: "var(--bg-surface)" }}
     >
-      {plots.map((src, idx) => (
+      {plots
+        .filter((src) => src.startsWith("data:image/png;base64,"))
+        .map((src, idx) => (
         <div
           key={`${idx}-${src.slice(-16)}`}
           className="rounded-lg p-2"

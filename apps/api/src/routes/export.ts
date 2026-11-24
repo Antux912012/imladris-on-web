@@ -3,14 +3,17 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { ExportRequestSchema } from "@imladris/shared";
 import type { AppConfig } from "../config.js";
 import type { AppDb } from "../db/client.js";
-import { workspaces } from "../db/schema.js";
 import { requireWorkspacePermission } from "../auth/rbac.js";
+import { resolveSessionContext } from "./execute.js";
 import { PathTraversalError, resolveSafeWorkspacePath } from "./files.js";
+
+function sanitizeDownloadName(name: string): string {
+  return name.replace(/[^A-Za-z0-9._-]/g, "_") || "export";
+}
 
 export async function registerExportRoutes(
   app: FastifyInstance,
@@ -35,32 +38,30 @@ export async function registerExportRoutes(
       }
     }
 
-    const [ws] = await db
-      .select({ kernelMode: workspaces.kernelMode })
-      .from(workspaces)
-      .where(eq(workspaces.id, id))
-      .limit(1);
-    const sessionKey =
-      ws?.kernelMode === "PERSONAL" ? `${id}:${auth.user.id}` : `${id}:shared`;
-
-    const resp = await fetch(`${config.runnerUrl}/export`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Runner-Secret": config.runnerSharedSecret,
-      },
-      body: JSON.stringify({
-        workspaceId: id,
-        sessionKey,
-        sourcePath: parsed.data.path,
-        format: parsed.data.format,
-        includeProvenance: true,
-      }),
-    });
+    const { sessionKey } = await resolveSessionContext(db, id, auth.user.id);
+    let resp: Response;
+    try {
+      resp = await fetch(`${config.runnerUrl}/export`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Runner-Secret": config.runnerSharedSecret,
+        },
+        body: JSON.stringify({
+          workspaceId: id,
+          sessionKey,
+          sourcePath: parsed.data.path,
+          format: parsed.data.format,
+          includeProvenance: true,
+        }),
+        signal: AbortSignal.timeout(65000),
+      });
+    } catch {
+      return reply.code(502).send({ error: "Runner export service unreachable or timed out" });
+    }
 
     if (!resp.ok) {
-      const detail = await resp.text();
-      return reply.code(502).send({ error: "Export failed", detail });
+      return reply.code(502).send({ error: `Export failed (HTTP ${resp.status})` });
     }
 
     return reply.send(await resp.json());
@@ -83,7 +84,8 @@ export async function registerExportRoutes(
         query.path
       );
       const data = await fs.readFile(targetPath);
-      const filename = path.basename(targetPath);
+      const filename = sanitizeDownloadName(path.basename(targetPath));
+      reply.header("X-Content-Type-Options", "nosniff");
       reply.header("Content-Disposition", `attachment; filename="${filename}"`);
       return reply.send(data);
     } catch (err) {

@@ -4,15 +4,12 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import chokidar, { type FSWatcher } from "chokidar";
 import { and, desc, eq } from "drizzle-orm";
 import * as Y from "yjs";
 import type { AppDb } from "../db/client.js";
 import { documentSnapshots } from "../db/schema.js";
 import { resolveSafeWorkspacePath } from "../routes/files.js";
 import type { WorkspaceEventBus } from "../ws/events.js";
-
-const inFlightWrites = new Set<string>();
 
 export function sha256Hex(content: string): string {
   return crypto.createHash("sha256").update(content, "utf8").digest("hex");
@@ -79,18 +76,13 @@ export async function persistYDocToDiskAndSnapshot(
   const hash = sha256Hex(content);
   const state = Buffer.from(Y.encodeStateAsUpdate(doc));
 
-  inFlightWrites.add(targetPath);
-  try {
-    await fs.mkdir(path.dirname(targetPath), { recursive: true });
-    const tmpPath = `${targetPath}.imladris-tmp-${crypto.randomBytes(4).toString("hex")}`;
-    await fs.writeFile(tmpPath, content, "utf8");
-    await fs.rename(tmpPath, targetPath);
-  } finally {
-    setTimeout(() => inFlightWrites.delete(targetPath), 250);
-  }
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  const tmpPath = `${targetPath}.imladris-tmp-${crypto.randomBytes(4).toString("hex")}`;
+  await fs.writeFile(tmpPath, content, "utf8");
+  await fs.rename(tmpPath, targetPath);
 
   const [latest] = await db
-    .select({ sha256Hash: documentSnapshots.sha256Hash, isCheckpoint: documentSnapshots.isCheckpoint })
+    .select({ sha256Hash: documentSnapshots.sha256Hash })
     .from(documentSnapshots)
     .where(
       and(
@@ -119,30 +111,4 @@ export async function persistYDocToDiskAndSnapshot(
     type: "file_tree_changed",
     payload: { relPath },
   });
-}
-
-export function startWorkspaceWatcher(
-  workspacesRoot: string,
-  workspaceId: string,
-  bus: WorkspaceEventBus
-): FSWatcher {
-  const wsDir = path.resolve(workspacesRoot, workspaceId);
-  const watcher = chokidar.watch(wsDir, {
-    ignoreInitial: true,
-    ignored: /(^|[/\\])\..*|\.imladris-tmp-/,
-  });
-
-  const emitChange = (absPath: string) => {
-    if (inFlightWrites.has(absPath)) return;
-    const relPath = path.relative(wsDir, absPath).split(path.sep).join("/");
-    bus.publish(workspaceId, {
-      type: "file_tree_changed",
-      payload: { relPath },
-    });
-  };
-
-  watcher.on("add", emitChange);
-  watcher.on("change", emitChange);
-  watcher.on("unlink", emitChange);
-  return watcher;
 }

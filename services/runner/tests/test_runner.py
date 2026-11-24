@@ -134,3 +134,33 @@ def test_runner_security_stateful_exec_timeout_and_export(
             },
         )
         assert exp_bad.status_code == 400
+
+        # Env allowlist strips host secrets (including arbitrary API keys)
+        monkeypatch.setenv("GEMINI_API_KEY", "secret-should-not-leak")
+        r_env = client.post(
+            "/execute",
+            headers=headers,
+            json={
+                "workspaceId": "ws-1",
+                "sessionKey": "ws-1:envtest",
+                "engine": "python",
+                "code": "import os; print(os.environ.get('GEMINI_API_KEY', 'STRIPPED'), os.environ.get('RUNNER_SHARED_SECRET', 'STRIPPED'))",
+            },
+        )
+        assert r_env.status_code == 200
+        assert r_env.json()["stdout"].strip() == "STRIPPED STRIPPED"
+
+        # Large (>100KB) stdout does not crash 64KB readline limit
+        r_big = client.post(
+            "/execute",
+            headers=headers,
+            json={
+                "workspaceId": "ws-1",
+                "sessionKey": "ws-1:envtest",
+                "engine": "python",
+                "code": "print('A' * 120000)",
+            },
+        )
+        assert r_big.status_code == 200
+        assert r_big.json()["ok"] is True
+        assert len(r_big.json()["stdout"].strip()) == 120000

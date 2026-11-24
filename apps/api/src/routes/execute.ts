@@ -10,20 +10,20 @@ import { workspaces } from "../db/schema.js";
 import { requireWorkspacePermission } from "../auth/rbac.js";
 import type { WorkspaceEventBus } from "../ws/events.js";
 
-async function resolveSessionKey(
+export async function resolveSessionContext(
   db: AppDb,
   workspaceId: string,
   userId: string
-): Promise<string> {
+): Promise<{ sessionKey: string; isPersonal: boolean }> {
   const [ws] = await db
     .select({ kernelMode: workspaces.kernelMode })
     .from(workspaces)
     .where(eq(workspaces.id, workspaceId))
     .limit(1);
-  if (ws?.kernelMode === "PERSONAL") {
-    return `${workspaceId}:${userId}`;
+  if (ws?.kernelMode.toUpperCase() === "PERSONAL") {
+    return { sessionKey: `${workspaceId}:${userId}`, isPersonal: true };
   }
-  return `${workspaceId}:shared`;
+  return { sessionKey: `${workspaceId}:shared`, isPersonal: false };
 }
 
 export async function registerExecuteRoutes(
@@ -42,25 +42,32 @@ export async function registerExecuteRoutes(
       return reply.code(400).send({ error: "Invalid execute payload" });
     }
 
-    const sessionKey = await resolveSessionKey(db, id, auth.user.id);
-    const resp = await fetch(`${config.runnerUrl}/execute`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Runner-Secret": config.runnerSharedSecret,
-      },
-      body: JSON.stringify({
-        workspaceId: id,
-        sessionKey,
-        engine: parsed.data.engine,
-        code: parsed.data.code,
-        timeoutMs: config.runnerExecTimeoutMs,
-      }),
-    });
+    const { sessionKey, isPersonal } = await resolveSessionContext(db, id, auth.user.id);
+    let resp: Response;
+    try {
+      resp = await fetch(`${config.runnerUrl}/execute`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Runner-Secret": config.runnerSharedSecret,
+        },
+        body: JSON.stringify({
+          workspaceId: id,
+          sessionKey,
+          engine: parsed.data.engine,
+          code: parsed.data.code,
+          timeoutMs: config.runnerExecTimeoutMs,
+        }),
+        signal: AbortSignal.timeout(config.runnerExecTimeoutMs + 5000),
+      });
+    } catch {
+      return reply.code(502).send({ error: "Runner service unreachable or timed out" });
+    }
 
     if (!resp.ok) {
-      const detail = await resp.text();
-      return reply.code(502).send({ error: "Runner execution failed", detail });
+      return reply
+        .code(502)
+        .send({ error: `Runner execution failed (HTTP ${resp.status})` });
     }
 
     const json = (await resp.json()) as Record<string, unknown>;
@@ -70,28 +77,27 @@ export async function registerExecuteRoutes(
       chunkId: parsed.data.chunkId,
     });
     const envVars = Array.isArray(json.env) ? json.env : [];
+    const targetUser = isPersonal ? auth.user.id : undefined;
 
     if (result.stdout || result.stderr) {
-      bus.publish(id, {
-        type: "stdout",
-        payload: {
-          stdout: result.stdout,
-          stderr: result.stderr,
-          ok: result.ok,
-          userId: auth.user.id,
+      bus.publish(
+        id,
+        {
+          type: "stdout",
+          payload: {
+            stdout: result.stdout,
+            stderr: result.stderr,
+            ok: result.ok,
+            userId: auth.user.id,
+          },
         },
-      });
+        targetUser
+      );
     }
     if (result.plots.length > 0) {
-      bus.publish(id, {
-        type: "plot",
-        payload: { plots: result.plots },
-      });
+      bus.publish(id, { type: "plot", payload: { plots: result.plots } }, targetUser);
     }
-    bus.publish(id, {
-      type: "env_updated",
-      payload: { variables: envVars },
-    });
+    bus.publish(id, { type: "env_updated", payload: { variables: envVars } }, targetUser);
 
     return reply.send({ ...result, env: envVars });
   });
@@ -101,21 +107,31 @@ export async function registerExecuteRoutes(
     const auth = await requireWorkspacePermission(req, reply, db, config, id, "execute");
     if (!auth) return;
 
-    const sessionKey = await resolveSessionKey(db, id, auth.user.id);
-    const resp = await fetch(`${config.runnerUrl}/restart`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Runner-Secret": config.runnerSharedSecret,
-      },
-      body: JSON.stringify({ sessionKey }),
-    });
+    const { sessionKey, isPersonal } = await resolveSessionContext(db, id, auth.user.id);
+    let resp: Response;
+    try {
+      resp = await fetch(`${config.runnerUrl}/restart`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Runner-Secret": config.runnerSharedSecret,
+        },
+        body: JSON.stringify({ sessionKey }),
+        signal: AbortSignal.timeout(10000),
+      });
+    } catch {
+      return reply.code(502).send({ error: "Runner service unreachable" });
+    }
 
     if (!resp.ok) {
       return reply.code(502).send({ error: "Failed to restart kernel" });
     }
 
-    bus.publish(id, { type: "env_updated", payload: { variables: [] } });
+    bus.publish(
+      id,
+      { type: "env_updated", payload: { variables: [] } },
+      isPersonal ? auth.user.id : undefined
+    );
     return reply.send({ ok: true });
   });
 
@@ -124,19 +140,21 @@ export async function registerExecuteRoutes(
     const auth = await requireWorkspacePermission(req, reply, db, config, id, "read");
     if (!auth) return;
 
-    const sessionKey = await resolveSessionKey(db, id, auth.user.id);
-    const resp = await fetch(
-      `${config.runnerUrl}/environment?sessionKey=${encodeURIComponent(sessionKey)}`,
-      {
-        headers: {
-          "X-Runner-Secret": config.runnerSharedSecret,
-        },
+    const { sessionKey } = await resolveSessionContext(db, id, auth.user.id);
+    try {
+      const resp = await fetch(
+        `${config.runnerUrl}/environment?sessionKey=${encodeURIComponent(sessionKey)}`,
+        {
+          headers: { "X-Runner-Secret": config.runnerSharedSecret },
+          signal: AbortSignal.timeout(5000),
+        }
+      );
+      if (!resp.ok) {
+        return reply.send({ variables: [] });
       }
-    );
-
-    if (!resp.ok) {
+      return reply.send(await resp.json());
+    } catch {
       return reply.send({ variables: [] });
     }
-    return reply.send(await resp.json());
   });
 }

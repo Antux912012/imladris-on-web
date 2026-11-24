@@ -3,17 +3,30 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Literal
 from fastapi import Depends, FastAPI
 from pydantic import BaseModel, Field
 
 from .exporter import export_document
 from .inspector import get_environment_snapshot
-from .security import resolve_workspace_cwd, verify_runner_secret
+from .security import get_runner_secret, resolve_workspace_cwd, verify_runner_secret
 from .sessions import SessionManager
 
-app = FastAPI(title="Imladris Runner", version="0.1.0")
 sessions = SessionManager()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    get_runner_secret()  # Fail fast in vps mode if secret is invalid
+    try:
+        yield
+    finally:
+        await sessions.close_all()
+
+
+app = FastAPI(title="Imladris Runner", version="0.1.0", lifespan=lifespan)
 
 
 class ExecutePayload(BaseModel):
@@ -45,6 +58,7 @@ async def health() -> dict[str, object]:
 
 @app.post("/execute", dependencies=[Depends(verify_runner_secret)])
 async def execute_code(payload: ExecutePayload) -> dict[str, object]:
+    await sessions.prune_idle()
     ws_dir = resolve_workspace_cwd(payload.workspaceId)
     session = sessions.get_or_create(payload.sessionKey, ws_dir)
     if payload.engine == "python":
@@ -60,14 +74,14 @@ async def restart_kernel(payload: RestartPayload) -> dict[str, object]:
 
 @app.get("/environment", dependencies=[Depends(verify_runner_secret)])
 async def get_environment(sessionKey: str) -> dict[str, object]:
-    session = sessions._sessions.get(sessionKey)
+    session = sessions.get(sessionKey)
     return {"variables": get_environment_snapshot(session)}
 
 
 @app.post("/export", dependencies=[Depends(verify_runner_secret)])
 async def export_doc(payload: ExportPayload) -> dict[str, object]:
     ws_dir = resolve_workspace_cwd(payload.workspaceId)
-    session = sessions._sessions.get(payload.sessionKey)
+    session = sessions.get(payload.sessionKey)
     env_vars = get_environment_snapshot(session)
     return await export_document(
         workspace_dir=ws_dir,

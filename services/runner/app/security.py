@@ -9,21 +9,39 @@ import re
 from pathlib import Path
 from fastapi import Header, HTTPException
 
-_SAFE_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+_SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
-_STRIPPED_ENV_KEYS = {
-    "RUNNER_SHARED_SECRET",
-    "JWT_SECRET",
-    "DATABASE_URL",
-    "OPENAI_API_KEY",
-    "ANTHROPIC_API_KEY",
+_INSECURE_DEFAULTS = {
+    "imladris-dev-runner-secret-change-in-prod",
+    "change-me-runner-secret",
+}
+
+_ALLOWED_ENV_KEYS = {
+    "PATH",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "TZ",
+    "SSL_CERT_FILE",
+    "REQUESTS_CA_BUNDLE",
+    "VIRTUAL_ENV",
+    "R_HOME",
+    "R_LIBS_USER",
+    "LD_LIBRARY_PATH",
 }
 
 
 def get_runner_secret() -> str:
-    return os.environ.get(
+    secret = os.environ.get(
         "RUNNER_SHARED_SECRET", "imladris-dev-runner-secret-change-in-prod"
     )
+    if os.environ.get("IMLADRIS_MODE") == "vps" and (
+        secret in _INSECURE_DEFAULTS or len(secret) < 16
+    ):
+        raise RuntimeError(
+            "IMLADRIS_MODE=vps requires a strong RUNNER_SHARED_SECRET (>= 16 chars)"
+        )
+    return secret
 
 
 def get_workspaces_root() -> Path:
@@ -39,7 +57,7 @@ async def verify_runner_secret(
 
 
 def resolve_workspace_cwd(workspace_id: str) -> Path:
-    if not _SAFE_ID_RE.match(workspace_id):
+    if not _SAFE_ID_RE.match(workspace_id) or ".." in workspace_id:
         raise HTTPException(status_code=400, detail="Invalid workspace identifier")
     root = get_workspaces_root()
     ws_dir = (root / workspace_id).resolve()
@@ -61,7 +79,7 @@ def resolve_safe_subpath(workspace_dir: Path, rel_path: str) -> Path:
 def sanitize_env(workspace_dir: Path) -> dict[str, str]:
     tmp_dir = workspace_dir / ".imladris_tmp"
     tmp_dir.mkdir(parents=True, exist_ok=True)
-    env = {k: v for k, v in os.environ.items() if k not in _STRIPPED_ENV_KEYS}
+    env = {k: v for k, v in os.environ.items() if k in _ALLOWED_ENV_KEYS}
     env["HOME"] = str(workspace_dir)
     env["TMPDIR"] = str(tmp_dir)
     env["MPLBACKEND"] = "Agg"

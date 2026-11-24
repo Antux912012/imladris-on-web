@@ -19,7 +19,6 @@
     "@hocuspocus/server": "^2.15.0",
     "@imladris/shared": "workspace:*",
     "@node-rs/argon2": "^2.0.2",
-    "chokidar": "^4.0.3",
     "drizzle-orm": "^0.43.1",
     "fastify": "^5.3.2",
     "jose": "^6.0.10",

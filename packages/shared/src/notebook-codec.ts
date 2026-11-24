@@ -17,13 +17,17 @@ export interface NotebookDocument {
   cells: NotebookCell[];
 }
 
+const TEXT_ENCODER = new TextEncoder();
+const TEXT_DECODER = new TextDecoder();
+
 function utf8ToBase64(text: string): string {
-  const bytes = new TextEncoder().encode(text);
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
+  const bytes = TEXT_ENCODER.encode(text);
+  const chunks: string[] = [];
+  const CHUNK_SIZE = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    chunks.push(String.fromCharCode(...bytes.subarray(i, i + CHUNK_SIZE)));
   }
-  return btoa(binary);
+  return btoa(chunks.join(""));
 }
 
 function base64ToUtf8(b64: string): string {
@@ -32,7 +36,7 @@ function base64ToUtf8(b64: string): string {
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);
   }
-  return new TextDecoder().decode(bytes);
+  return TEXT_DECODER.decode(bytes);
 }
 
 function toSourceLines(text: string): string[] {
