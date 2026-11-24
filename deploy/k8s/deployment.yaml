@@ -1,0 +1,128 @@
+# SPDX-FileCopyrightText: 2026 Antonio De Gaetano <antux912012@users.noreply.github.com>
+# SPDX-License-Identifier: Apache-2.0
+# Single-node lab/university Kubernetes manifest.
+# Uses Recreate strategy so SQLite WAL + shared workspace PVC remain consistent.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: imladris-config
+data:
+  IMLADRIS_MODE: "vps"
+  AUTH_MODE: "team"
+  REGISTRATION_MODE: "invite"
+  ALLOWED_EMAIL_DOMAINS: ""
+  AIR_GAPPED_MODE: "false"
+  PUBLIC_URL: "https://imladris.example.edu"
+  DATABASE_URL: "file:/data/db/imladris.sqlite"
+  WORKSPACES_ROOT: "/data/workspaces"
+  RUNNER_URL: "http://127.0.0.1:9000"
+  RUNNER_EXEC_TIMEOUT_MS: "60000"
+  AI_ALLOW_CLOUD: "false"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: imladris-secrets
+type: Opaque
+stringData:
+  # Replace before applying: openssl rand -hex 32
+  JWT_SECRET: "REPLACE_WITH_OPENSSL_RAND_HEX_32"
+  RUNNER_SHARED_SECRET: "REPLACE_WITH_OPENSSL_RAND_HEX_24"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: imladris-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: imladris-studio
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: imladris-studio
+  template:
+    metadata:
+      labels:
+        app: imladris-studio
+    spec:
+      securityContext:
+        fsGroup: 10001
+        runAsNonRoot: true
+      containers:
+        - name: web
+          image: ghcr.io/antux912012/imladris-web:latest
+          ports:
+            - containerPort: 80
+        - name: api
+          image: ghcr.io/antux912012/imladris-api:latest
+          securityContext:
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: imladris-config
+            - secretRef:
+                name: imladris-secrets
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+              subPath: db
+            - name: data
+              mountPath: /data/workspaces
+              subPath: workspaces
+        - name: runner
+          image: ghcr.io/antux912012/imladris-runner:latest
+          securityContext:
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 9000
+          envFrom:
+            - configMapRef:
+                name: imladris-config
+            - secretRef:
+                name: imladris-secrets
+          volumeMounts:
+            - name: data
+              mountPath: /data/workspaces
+              subPath: workspaces
+          resources:
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: imladris-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: imladris-service
+spec:
+  selector:
+    app: imladris-studio
+  ports:
+    - name: web
+      port: 80
+      targetPort: 80
+    - name: api
+      port: 3000
+      targetPort: 3000

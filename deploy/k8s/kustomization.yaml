@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Antonio De Gaetano <antux912012@users.noreply.github.com>
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: imladris
+resources:
+  - namespace.yaml
+  - deployment.yaml

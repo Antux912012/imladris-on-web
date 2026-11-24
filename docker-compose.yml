@@ -1,0 +1,86 @@
+# SPDX-FileCopyrightText: 2026 Antonio De Gaetano <antux912012@users.noreply.github.com>
+# SPDX-License-Identifier: Apache-2.0
+
+services:
+  proxy:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      IMLADRIS_SITE: ":80"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - imladris-web
+      - imladris-api
+    networks:
+      - imladris-edge
+
+  imladris-web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    networks:
+      - imladris-edge
+
+  imladris-api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      IMLADRIS_MODE: ${IMLADRIS_MODE:-local}
+      AUTH_MODE: ${AUTH_MODE:-team}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-32-chars}
+      RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:-change-me-runner-secret}
+      DATABASE_URL: file:/data/db/imladris.sqlite
+      WORKSPACES_ROOT: /data/workspaces
+      RUNNER_URL: http://imladris-runner:9000
+      RUNNER_EXEC_TIMEOUT_MS: ${RUNNER_EXEC_TIMEOUT_MS:-60000}
+      AI_LOCAL_URL: ${AI_LOCAL_URL:-http://imladris-ollama:11434}
+      AI_ALLOW_CLOUD: ${AI_ALLOW_CLOUD:-false}
+    volumes:
+      - imladris_db:/data/db
+      - imladris_workspaces:/data/workspaces
+    depends_on:
+      - imladris-runner
+    networks:
+      - imladris-edge
+      - imladris-internal
+
+  imladris-runner:
+    build:
+      context: .
+      dockerfile: services/runner/Dockerfile
+    restart: unless-stopped
+    user: "10001:10001"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 4g
+    cpus: "2.0"
+    environment:
+      RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:-change-me-runner-secret}
+      WORKSPACES_ROOT: /data/workspaces
+    volumes:
+      - imladris_workspaces:/data/workspaces
+    networks:
+      - imladris-internal
+
+networks:
+  imladris-edge:
+    driver: bridge
+  imladris-internal:
+    driver: bridge
+    internal: true
+
+volumes:
+  imladris_db:
+  imladris_workspaces:
+  caddy_data:

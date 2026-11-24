@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+data/
+workspaces/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.venv/
+__pycache__/
+.pytest_cache/
+.DS_Store
