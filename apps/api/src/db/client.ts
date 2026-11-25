@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
   name TEXT NOT NULL,
   kernel_mode TEXT NOT NULL DEFAULT 'SHARED',
   toolchain_id TEXT,
+  department_id TEXT,
   owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at INTEGER NOT NULL
 );
@@ -203,6 +204,74 @@ CREATE TABLE IF NOT EXISTS assignment_submissions (
   snapshot_hash TEXT,
   submitted_at INTEGER
 );
+
+CREATE TABLE IF NOT EXISTS review_links (
+  token TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  label TEXT NOT NULL DEFAULT 'External Referee',
+  blind_authors INTEGER NOT NULL DEFAULT 1,
+  expires_at INTEGER NOT NULL,
+  revoked INTEGER NOT NULL DEFAULT 0,
+  created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS git_remotes (
+  workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+  remote_url TEXT NOT NULL,
+  branch TEXT NOT NULL DEFAULT 'main',
+  last_synced_at INTEGER,
+  last_commit_hash TEXT
+);
+
+CREATE TABLE IF NOT EXISTS institutional_templates (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  files_json TEXT NOT NULL DEFAULT '[]',
+  created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS zotero_libraries (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  group_id TEXT NOT NULL,
+  bibtex_cache TEXT NOT NULL DEFAULT '',
+  synced_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS departments (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  quota_mb INTEGER NOT NULL DEFAULT 10240,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS department_members (
+  department_id TEXT NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'MEMBER',
+  joined_at INTEGER NOT NULL,
+  PRIMARY KEY (department_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS compute_jobs (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  engine TEXT NOT NULL,
+  target TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'QUEUED',
+  slurm_job_id TEXT,
+  code TEXT NOT NULL,
+  stdout TEXT NOT NULL DEFAULT '',
+  stderr TEXT NOT NULL DEFAULT '',
+  submitted_at INTEGER NOT NULL,
+  completed_at INTEGER
+);
 `;
 
 const POSTGRES_DDL = `
@@ -230,10 +299,12 @@ CREATE TABLE IF NOT EXISTS workspaces (
   name TEXT NOT NULL,
   kernel_mode TEXT NOT NULL DEFAULT 'SHARED',
   toolchain_id TEXT,
+  department_id TEXT,
   owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at BIGINT NOT NULL
 );
 ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS toolchain_id TEXT;
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS department_id TEXT;
 
 CREATE TABLE IF NOT EXISTS workspace_members (
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -379,6 +450,74 @@ CREATE TABLE IF NOT EXISTS assignment_submissions (
   snapshot_hash TEXT,
   submitted_at BIGINT
 );
+
+CREATE TABLE IF NOT EXISTS review_links (
+  token TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  label TEXT NOT NULL DEFAULT 'External Referee',
+  blind_authors INTEGER NOT NULL DEFAULT 1,
+  expires_at BIGINT NOT NULL,
+  revoked INTEGER NOT NULL DEFAULT 0,
+  created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS git_remotes (
+  workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+  remote_url TEXT NOT NULL,
+  branch TEXT NOT NULL DEFAULT 'main',
+  last_synced_at BIGINT,
+  last_commit_hash TEXT
+);
+
+CREATE TABLE IF NOT EXISTS institutional_templates (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  files_json TEXT NOT NULL DEFAULT '[]',
+  created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS zotero_libraries (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  group_id TEXT NOT NULL,
+  bibtex_cache TEXT NOT NULL DEFAULT '',
+  synced_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS departments (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  quota_mb INTEGER NOT NULL DEFAULT 10240,
+  created_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS department_members (
+  department_id TEXT NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'MEMBER',
+  joined_at BIGINT NOT NULL,
+  PRIMARY KEY (department_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS compute_jobs (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  engine TEXT NOT NULL,
+  target TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'QUEUED',
+  slurm_job_id TEXT,
+  code TEXT NOT NULL,
+  stdout TEXT NOT NULL DEFAULT '',
+  stderr TEXT NOT NULL DEFAULT '',
+  submitted_at BIGINT NOT NULL,
+  completed_at BIGINT
+);
 `;
 
 function normalizeParams(params: unknown[]): SQLInputValue[] {
@@ -511,6 +650,9 @@ export async function createDb(databaseUrl: string): Promise<{
   const wsColNames = new Set(wsCols.map((c) => c.name));
   if (!wsColNames.has("toolchain_id")) {
     sqlite.exec("ALTER TABLE workspaces ADD COLUMN toolchain_id TEXT");
+  }
+  if (!wsColNames.has("department_id")) {
+    sqlite.exec("ALTER TABLE workspaces ADD COLUMN department_id TEXT");
   }
 
   const db = drizzle(

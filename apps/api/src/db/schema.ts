@@ -29,6 +29,7 @@ export const workspaces = sqliteTable("workspaces", {
   name: text("name").notNull(),
   kernelMode: text("kernel_mode").notNull().default("SHARED"),
   toolchainId: text("toolchain_id"),
+  departmentId: text("department_id"),
   ownerId: text("owner_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
@@ -210,4 +211,85 @@ export const assignmentSubmissions = sqliteTable("assignment_submissions", {
   feedback: text("feedback"),
   snapshotHash: text("snapshot_hash"),
   submittedAt: integer("submitted_at"),
+});
+
+export const reviewLinks = sqliteTable("review_links", {
+  token: text("token").primaryKey(),
+  workspaceId: text("workspace_id")
+    .notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  label: text("label").notNull().default("External Referee"),
+  blindAuthors: integer("blind_authors", { mode: "boolean" }).notNull().default(true),
+  expiresAt: integer("expires_at").notNull(),
+  revoked: integer("revoked", { mode: "boolean" }).notNull().default(false),
+  createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const gitRemotes = sqliteTable("git_remotes", {
+  workspaceId: text("workspace_id")
+    .primaryKey()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  remoteUrl: text("remote_url").notNull(),
+  branch: text("branch").notNull().default("main"),
+  lastSyncedAt: integer("last_synced_at"),
+  lastCommitHash: text("last_commit_hash"),
+});
+
+export const institutionalTemplates = sqliteTable("institutional_templates", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  category: text("category").notNull(),
+  description: text("description").notNull().default(""),
+  filesJson: text("files_json").notNull().default("[]"),
+  createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const zoteroLibraries = sqliteTable("zotero_libraries", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  groupId: text("group_id").notNull(),
+  bibtexCache: text("bibtex_cache").notNull().default(""),
+  syncedAt: integer("synced_at").notNull(),
+});
+
+export const departments = sqliteTable("departments", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  quotaMb: integer("quota_mb").notNull().default(10240),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const departmentMembers = sqliteTable(
+  "department_members",
+  {
+    departmentId: text("department_id")
+      .notNull()
+      .references(() => departments.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("MEMBER"),
+    joinedAt: integer("joined_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.departmentId, table.userId] })]
+);
+
+export const computeJobs = sqliteTable("compute_jobs", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id")
+    .notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  engine: text("engine").notNull(),
+  target: text("target").notNull(),
+  status: text("status").notNull().default("QUEUED"),
+  slurmJobId: text("slurm_job_id"),
+  code: text("code").notNull(),
+  stdout: text("stdout").notNull().default(""),
+  stderr: text("stderr").notNull().default(""),
+  submittedAt: integer("submitted_at").notNull(),
+  completedAt: integer("completed_at"),
 });

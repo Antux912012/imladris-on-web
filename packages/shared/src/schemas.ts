@@ -100,8 +100,53 @@ export const AuditEventRecordSchema = z.object({
 });
 export type AuditEventRecord = z.infer<typeof AuditEventRecordSchema>;
 
+export const ReviewLinkSchema = z.object({
+  token: z.string(),
+  workspaceId: z.string(),
+  label: z.string(),
+  blindAuthors: z.boolean(),
+  expiresAt: z.number(),
+  revoked: z.boolean(),
+  createdAt: z.number(),
+});
+export type ReviewLink = z.infer<typeof ReviewLinkSchema>;
+
+export const InstitutionalTemplateSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  category: z.string(),
+  description: z.string(),
+  files: z.array(z.object({ path: z.string(), content: z.string() })),
+});
+export type InstitutionalTemplate = z.infer<typeof InstitutionalTemplateSchema>;
+
+export const DepartmentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+  quotaMb: z.number().int().positive(),
+  myRole: z.enum(["DEPT_ADMIN", "MEMBER"]).optional(),
+  createdAt: z.number(),
+});
+export type Department = z.infer<typeof DepartmentSchema>;
+
 export const ExecuteEngineSchema = z.enum(["r", "python", "bash", "julia"]);
 export type ExecuteEngine = z.infer<typeof ExecuteEngineSchema>;
+
+export const ComputeJobSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  userId: z.string().nullable(),
+  engine: ExecuteEngineSchema,
+  target: z.enum(["gpu-a100", "slurm-highmem", "k8s-gpu", "local"]),
+  status: z.enum(["QUEUED", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"]),
+  slurmJobId: z.string().nullable(),
+  stdout: z.string(),
+  stderr: z.string(),
+  submittedAt: z.number(),
+  completedAt: z.number().nullable(),
+});
+export type ComputeJob = z.infer<typeof ComputeJobSchema>;
 
 export const ExecuteRequestSchema = z.object({
   engine: ExecuteEngineSchema,

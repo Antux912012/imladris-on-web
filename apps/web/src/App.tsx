@@ -49,6 +49,11 @@ const ComplianceSignModal = lazy(() =>
     default: m.ComplianceSignModal,
   }))
 );
+const ResearchHubModal = lazy(() =>
+  import("./components/ResearchHubModal").then((m) => ({
+    default: m.ResearchHubModal,
+  }))
+);
 
 export function App() {
   const {
@@ -238,6 +243,7 @@ export function App() {
         <AdminPanelModal />
         <ClassroomModal />
         <ComplianceSignModal />
+        <ResearchHubModal />
       </Suspense>
       <DemoUpgradeModal />
     </div>

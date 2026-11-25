@@ -16,7 +16,7 @@ SPDX-License-Identifier: Apache-2.0
 
 <p align="center">
   <a href="https://github.com/Antux912012/imladris"><img src="https://img.shields.io/badge/Sister%20Project-Imladris%20v0.42.1-5E81AC?style=flat-square" alt="Native Imladris"></a>
-  <img src="https://img.shields.io/badge/Version-v0.1.0-blue?style=flat-square" alt="Version v0.1.0">
+  <img src="https://img.shields.io/badge/Version-v0.2.0-blue?style=flat-square" alt="Version v0.2.0">
   <img src="https://img.shields.io/badge/Docker%20%7C%20Podman%20%7C%20K8s-Ready-2496ED?style=flat-square" alt="Container Ready">
   <img src="https://img.shields.io/badge/License-Apache--2.0-brightgreen?style=flat-square" alt="Apache-2.0 License">
 </p>
@@ -74,7 +74,7 @@ Each workspace selects one of two execution models in `imladris-runner`:
 
 `imladris-on-web` shares format profiles, chunk parsing, and lossless `.ipynb` round-trip logic with [native Imladris (`v0.42.1`)](https://github.com/Antux912012/imladris), adapted for browser and container execution:
 
-| Capability | Native Imladris (`v0.42.1`) | Imladris on Web (`v0.1.0`) |
+| Capability | Native Imladris (`v0.43.2`) | Imladris on Web (`v0.2.0`) |
 | :--- | :--- | :--- |
 | **Workbench Layout** | Focus Mode + 4-Quadrant `RStudioDockGrid` | Focus Mode + 4-Quadrant `react-resizable-panels` |
 | **Document Formats** | `.qmd`, `.Rmd`, `.ipynb`, `.md`, `.tex`, `.R`, `.py`, `.ts`, `.html`, `.rtf`, `.csv`, `.tsv`, `.Rproj`, `.bib` | Shared `FormatProfile` parity (CodeMirror 6 + Yjs CRDT) |

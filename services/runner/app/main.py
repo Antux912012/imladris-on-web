@@ -26,7 +26,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         await sessions.close_all()
 
 
-app = FastAPI(title="Imladris Runner", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Imladris Runner", version="0.2.0", lifespan=lifespan)
 
 
 class ExecutePayload(BaseModel):

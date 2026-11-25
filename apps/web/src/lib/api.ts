@@ -8,12 +8,16 @@ import type {
   CommentMessage,
   CommentThread,
   CommunityPluginEntry,
+  ComputeJob,
+  Department,
   DocumentSnapshotMeta,
   ElectronicSignature,
   EnvVariable,
   ExecuteEngine,
   ExecuteResponse,
   ExportFormat,
+  InstitutionalTemplate,
+  ReviewLink,
   Role,
   SsoProtocol,
   SsoProviderPublic,
@@ -622,5 +626,138 @@ export const api = {
     requestJson<{ signature: ElectronicSignature }>(
       `/api/workspaces/${workspaceId}/signatures`,
       { method: "POST", body: JSON.stringify(payload) }
+    ),
+
+  // 6. Double-Blind Peer Review Links
+  listReviewLinks: (workspaceId: string) =>
+    requestJson<{ links: ReviewLink[] }>(`/api/workspaces/${workspaceId}/review-links`),
+  createReviewLink: (
+    workspaceId: string,
+    payload: { label: string; blindAuthors: boolean; expiresInHours: number }
+  ) =>
+    requestJson<{ link: ReviewLink }>(`/api/workspaces/${workspaceId}/review-links`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  revokeReviewLink: (workspaceId: string, token: string) =>
+    requestJson<{ revoked: boolean }>(
+      `/api/workspaces/${workspaceId}/review-links/${encodeURIComponent(token)}`,
+      { method: "DELETE" }
+    ),
+
+  // 7. Git Sync & Zenodo/Dataverse Archival
+  getGitStatus: (workspaceId: string) =>
+    requestJson<{
+      remote: { remoteUrl: string; branch: string; lastCommitHash: string | null } | null;
+      status: string;
+    }>(`/api/workspaces/${workspaceId}/git`),
+  configureGit: (workspaceId: string, remoteUrl: string, branch: string) =>
+    requestJson<{ ok: boolean }>(`/api/workspaces/${workspaceId}/git/config`, {
+      method: "POST",
+      body: JSON.stringify({ remoteUrl, branch }),
+    }),
+  syncGit: (
+    workspaceId: string,
+    action: "status" | "commit" | "pull" | "push",
+    message: string
+  ) =>
+    requestJson<{ ok: boolean; output: string; commitHash: string | null }>(
+      `/api/workspaces/${workspaceId}/git/sync`,
+      { method: "POST", body: JSON.stringify({ action, message }) }
+    ),
+  depositArchive: (
+    workspaceId: string,
+    payload: {
+      provider: "zenodo" | "zenodo-sandbox" | "dataverse";
+      title: string;
+      description: string;
+      apiToken?: string;
+    }
+  ) =>
+    requestJson<{
+      archiveFileName: string;
+      depositId: string | null;
+      doiUrl: string | null;
+      fileCount: number;
+    }>(`/api/workspaces/${workspaceId}/archive/deposit`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  // 8. Institutional Templates & Zotero Group Libraries
+  listTemplates: () =>
+    requestJson<{ templates: InstitutionalTemplate[] }>("/api/hub/templates"),
+  instantiateTemplate: (templateId: string, name?: string) =>
+    requestJson<{ workspace: WorkspaceWithRole }>(
+      `/api/hub/templates/${templateId}/instantiate`,
+      { method: "POST", body: JSON.stringify({ name }) }
+    ),
+  listZoteroLibraries: () =>
+    requestJson<{
+      libraries: Array<{
+        id: string;
+        name: string;
+        groupId: string;
+        bibtexCache: string;
+        syncedAt: number;
+      }>;
+    }>("/api/hub/zotero"),
+  syncZoteroLibrary: (payload: {
+    name: string;
+    groupId: string;
+    apiKey?: string;
+    bibtexFallback?: string;
+  }) =>
+    requestJson<{ library: { id: string } }>("/api/hub/zotero/sync", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  // 9. Departments & Delegated Sub-Admins
+  listDepartments: () =>
+    requestJson<{ departments: Department[] }>("/api/departments"),
+  createDepartment: (name: string, quotaMb: number) =>
+    requestJson<{ department: Department }>("/api/departments", {
+      method: "POST",
+      body: JSON.stringify({ name, quotaMb }),
+    }),
+  listDepartmentMembers: (deptId: string) =>
+    requestJson<{
+      members: Array<{
+        userId: string;
+        email: string;
+        displayName: string;
+        role: "DEPT_ADMIN" | "MEMBER";
+      }>;
+    }>(`/api/departments/${deptId}/members`),
+  addDepartmentMember: (
+    deptId: string,
+    email: string,
+    role: "DEPT_ADMIN" | "MEMBER"
+  ) =>
+    requestJson<{ ok: boolean }>(`/api/departments/${deptId}/members`, {
+      method: "POST",
+      body: JSON.stringify({ email, role }),
+    }),
+
+  // 10. HPC / Slurm & GPU Queue Offloading
+  listHpcJobs: (workspaceId: string) =>
+    requestJson<{ jobs: ComputeJob[] }>(`/api/workspaces/${workspaceId}/hpc/jobs`),
+  submitHpcJob: (
+    workspaceId: string,
+    payload: {
+      engine: ExecuteEngine;
+      target: "gpu-a100" | "slurm-highmem" | "k8s-gpu" | "local";
+      code: string;
+    }
+  ) =>
+    requestJson<{ job: ComputeJob }>(`/api/workspaces/${workspaceId}/hpc/submit`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  cancelHpcJob: (workspaceId: string, jobId: string) =>
+    requestJson<{ ok: boolean }>(
+      `/api/workspaces/${workspaceId}/hpc/jobs/${jobId}/cancel`,
+      { method: "POST" }
     ),
 };

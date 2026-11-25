@@ -17,6 +17,7 @@ import {
   Shield,
   GraduationCap,
   FileSignature,
+  Layers,
 } from "lucide-react";
 import { parseChunks } from "@imladris/shared";
 import { api, isBrowserStandaloneMode } from "../lib/api";
@@ -52,6 +53,7 @@ export function HeaderBar({ onCreateWorkspace, onLogout }: Props) {
     setShowAdminModal,
     setShowClassroomModal,
     setShowSignModal,
+    setShowResearchHubModal,
     setShowDemoUpgradeModal,
   } = useWorkspaceStore();
 
@@ -312,6 +314,18 @@ export function HeaderBar({ onCreateWorkspace, onLogout }: Props) {
           >
             <FileSignature className="h-3.5 w-3.5" />
             <span className="hidden xl:inline">Sign</span>
+          </button>
+        )}
+
+        {!isBrowserStandaloneMode() && activeWorkspace && (
+          <button
+            type="button"
+            onClick={() => setShowResearchHubModal(true)}
+            title="Research Hub (Peer Review, Git/Zenodo, Templates, Departments, HPC)"
+            className="ui-control flex items-center gap-1 rounded-md px-2 py-1 text-xs"
+          >
+            <Layers className="h-3.5 w-3.5" />
+            <span className="hidden xl:inline">Hub</span>
           </button>
         )}
 
