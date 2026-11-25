@@ -117,6 +117,11 @@ export function HeaderBar({ onCreateWorkspace, onLogout }: Props) {
       }}
     >
       <div className="flex shrink-0 items-center gap-2">
+        <img
+          src="./favicon.svg"
+          alt="Imladris on Web"
+          className="h-5 w-5 shrink-0"
+        />
         <span className="text-sm font-semibold tracking-tight">Imladris</span>
         <span
           className="inline-flex items-center gap-1.5 text-xs"

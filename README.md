@@ -3,6 +3,10 @@ SPDX-FileCopyrightText: 2026 Antonio De Gaetano <antux912012@users.noreply.githu
 SPDX-License-Identifier: Apache-2.0
 -->
 
+<p align="center">
+  <img src="apps/web/public/favicon.svg" width="96" height="96" alt="Imladris on Web icon" />
+</p>
+
 <h1 align="center">Imladris on Web</h1>
 <h3 align="center">Self-Hosted Collaborative Scientific Authoring &amp; Execution Studio</h3>
 
