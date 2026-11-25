@@ -12,6 +12,7 @@ import {
   Columns2,
   LayoutGrid,
   History,
+  Shield,
 } from "lucide-react";
 import { parseChunks } from "@imladris/shared";
 import { api, isBrowserStandaloneMode } from "../lib/api";
@@ -44,6 +45,7 @@ export function HeaderBar({ onCreateWorkspace, onLogout }: Props) {
     setShowShareModal,
     setShowPluginModal,
     setShowHistoryModal,
+    setShowAdminModal,
     setShowDemoUpgradeModal,
   } = useWorkspaceStore();
 
@@ -232,6 +234,18 @@ export function HeaderBar({ onCreateWorkspace, onLogout }: Props) {
             }}
           >
             Download / Self-Host
+          </button>
+        )}
+
+        {!isBrowserStandaloneMode() && user?.systemRole === "ADMIN" && (
+          <button
+            type="button"
+            onClick={() => setShowAdminModal(true)}
+            title="Admin Panel Center"
+            className="ui-control flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium"
+          >
+            <Shield className="h-3.5 w-3.5" style={{ color: "var(--accent)" }} />
+            <span className="hidden md:inline">Admin</span>
           </button>
         )}
 

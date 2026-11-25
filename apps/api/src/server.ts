@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Antonio De Gaetano <antux912012@users.noreply.github.com>
 // SPDX-License-Identifier: Apache-2.0
 
+import crypto from "node:crypto";
+import { eq } from "drizzle-orm";
 import { pathToFileURL } from "node:url";
 import Fastify, { type FastifyInstance } from "fastify";
 import fastifyCookie from "@fastify/cookie";
@@ -10,7 +12,10 @@ import fastifyWebsocket from "@fastify/websocket";
 import type { Hocuspocus } from "@hocuspocus/server";
 import { loadConfig, type AppConfig } from "./config.js";
 import { createDb, type AppDb } from "./db/client.js";
+import { users } from "./db/schema.js";
+import { hashPassword } from "./auth/password.js";
 import { registerAuthRoutes } from "./routes/auth.js";
+import { registerAdminRoutes } from "./routes/admin.js";
 import { registerWorkspaceRoutes } from "./routes/workspaces.js";
 import { registerFileRoutes } from "./routes/files.js";
 import { registerExecuteRoutes } from "./routes/execute.js";
@@ -31,20 +36,60 @@ export interface BuiltApp {
   close: () => Promise<void>;
 }
 
+async function seedInitialAdmin(db: AppDb, config: AppConfig): Promise<void> {
+  if (!config.adminEmail || !config.adminPassword) return;
+  const [existing] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, config.adminEmail))
+    .limit(1);
+  if (existing) {
+    await db
+      .update(users)
+      .set({ systemRole: "ADMIN", accessLevel: "FULL", disabled: false })
+      .where(eq(users.id, existing.id));
+    return;
+  }
+  const passwordHash = await hashPassword(config.adminPassword);
+  await db.insert(users).values({
+    id: crypto.randomUUID(),
+    email: config.adminEmail,
+    displayName: config.adminDisplayName ?? "Administrator",
+    passwordHash,
+    avatarColor: "#3584e4",
+    systemRole: "ADMIN",
+    accessLevel: "FULL",
+    disabled: false,
+    createdAt: Date.now(),
+  });
+}
+
 export async function buildApp(overrides: Partial<AppConfig> = {}): Promise<BuiltApp> {
   const config = loadConfig(overrides);
-  const { db, sqlite } = createDb(config.databaseUrl);
+  const { db, close: closeDb } = await createDb(config.databaseUrl);
+  await seedInitialAdmin(db, config);
   const eventBus = new WorkspaceEventBus();
   const hocuspocus = createHocuspocusServer(db, config, eventBus);
 
   const app = Fastify({
     logger: process.env.NODE_ENV !== "test",
     bodyLimit: 10 * 1024 * 1024,
+    trustProxy: true,
   });
 
   await app.register(fastifyCookie);
   await app.register(fastifyCors, {
-    origin: config.publicUrl,
+    origin: (origin, cb) => {
+      if (!origin || config.corsOrigins.includes("*")) {
+        cb(null, true);
+        return;
+      }
+      if (config.corsOrigins.includes(origin)) {
+        cb(null, true);
+        return;
+      }
+      cb(null, false);
+    },
     credentials: true,
   });
   await app.register(fastifyRateLimit, {
@@ -68,6 +113,7 @@ export async function buildApp(overrides: Partial<AppConfig> = {}): Promise<Buil
   }));
 
   await registerAuthRoutes(app, db, config);
+  await registerAdminRoutes(app, db, config);
   await registerWorkspaceRoutes(app, db, config, eventBus, hocuspocus);
   await registerFileRoutes(app, db, config);
   await registerExecuteRoutes(app, db, config, eventBus);
@@ -83,7 +129,7 @@ export async function buildApp(overrides: Partial<AppConfig> = {}): Promise<Buil
     eventBus.closeAll();
     await hocuspocus.destroy();
     await app.close();
-    sqlite.close();
+    await closeDb();
   };
 
   return { app, db, config, eventBus, hocuspocus, close };

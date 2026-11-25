@@ -62,25 +62,25 @@ export function AuthGate({ onAuthenticated }: Props) {
       style={{ backgroundColor: "var(--bg-window)" }}
     >
       <div
-        className="w-full max-w-md rounded-xl p-6"
+        className="w-full max-w-md rounded-xl p-6 shadow-lg"
         style={{
           backgroundColor: "var(--bg-surface)",
           border: "1px solid var(--border-subtle)",
         }}
       >
-        <h1 className="mb-1 text-xl font-semibold">Imladris on Web</h1>
-        <p className="mb-4 text-xs" style={{ color: "var(--fg-muted)" }}>
-          Collaborative Scientific Authoring &amp; Execution Studio
-        </p>
-
-        <button
-          type="button"
-          onClick={handleBrowserStandalone}
-          disabled={busy}
-          className="ui-control mb-5 w-full rounded-lg px-4 py-2 text-xs font-semibold"
-        >
-          Open Browser Workspace (Offline / No Server)
-        </button>
+        <div className="mb-4 flex items-center gap-3">
+          <img
+            src="./favicon.svg"
+            alt="Imladris on Web"
+            className="h-9 w-9 shrink-0"
+          />
+          <div>
+            <h1 className="text-xl font-semibold leading-tight">Imladris on Web</h1>
+            <p className="text-xs" style={{ color: "var(--fg-muted)" }}>
+              Collaborative Scientific Authoring &amp; Execution Studio
+            </p>
+          </div>
+        </div>
 
         <div className="mb-4 flex gap-2">
           <button
@@ -228,6 +228,20 @@ export function AuthGate({ onAuthenticated }: Props) {
                 : "Register & Continue"}
           </button>
         </form>
+
+        <div
+          className="mt-4 border-t pt-4"
+          style={{ borderColor: "var(--border-subtle)" }}
+        >
+          <button
+            type="button"
+            onClick={handleBrowserStandalone}
+            disabled={busy}
+            className="ui-control w-full rounded-lg px-4 py-2 text-xs font-medium"
+          >
+            Open Browser Workspace (Offline / No Server)
+          </button>
+        </div>
       </div>
     </div>
   );

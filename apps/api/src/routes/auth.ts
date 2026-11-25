@@ -36,13 +36,13 @@ const LoginBody = z.object({
 function setSessionCookie(
   reply: { setCookie: (name: string, val: string, opts: Record<string, unknown>) => unknown },
   token: string,
-  config: AppConfig
+  isHttps: boolean
 ): void {
   reply.setCookie(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
-    secure: config.publicUrl.startsWith("https://"),
+    secure: isHttps,
     maxAge: 60 * 60 * 24 * 7,
   });
 }
@@ -72,18 +72,17 @@ export async function registerAuthRoutes(
       }
     }
 
+    const [userCountRow] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(users);
+    const isFirstUser = Number(userCountRow?.count ?? 0) === 0;
+
     if (config.registrationMode === "closed") {
-      const [userCountRow] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(users);
-      if ((userCountRow?.count ?? 0) > 0) {
+      if (!isFirstUser) {
         return reply.code(403).send({ error: "Public registration is disabled" });
       }
     } else if (config.registrationMode === "invite") {
-      const [userCountRow] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(users);
-      if ((userCountRow?.count ?? 0) > 0) {
+      if (!isFirstUser) {
         if (!parsed.data.inviteToken) {
           return reply
             .code(403)
@@ -120,6 +119,8 @@ export async function registerAuthRoutes(
     const passwordHash = await hashPassword(parsed.data.password);
     const avatarColor =
       AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)] ?? "#3584e4";
+    const systemRole = isFirstUser ? "ADMIN" : "USER";
+    const accessLevel = "FULL";
     const createdAt = Date.now();
 
     await db.insert(users).values({
@@ -128,6 +129,9 @@ export async function registerAuthRoutes(
       displayName,
       passwordHash,
       avatarColor,
+      systemRole,
+      accessLevel,
+      disabled: false,
       createdAt,
     });
 
@@ -135,10 +139,18 @@ export async function registerAuthRoutes(
       { sub: id, email, displayName },
       config.jwtSecret
     );
-    setSessionCookie(reply, token, config);
+    setSessionCookie(reply, token, req.protocol === "https");
 
     return reply.code(201).send({
-      user: { id, email, displayName, avatarColor },
+      user: {
+        id,
+        email,
+        displayName,
+        avatarColor,
+        systemRole,
+        accessLevel,
+        disabled: false,
+      },
     });
   });
 
@@ -162,11 +174,17 @@ export async function registerAuthRoutes(
       return reply.code(401).send({ error: "Invalid email or password" });
     }
 
+    if (user.disabled) {
+      return reply.code(403).send({
+        error: "Account is disabled. Contact your administrator.",
+      });
+    }
+
     const token = await signSessionToken(
       { sub: user.id, email: user.email, displayName: user.displayName },
       config.jwtSecret
     );
-    setSessionCookie(reply, token, config);
+    setSessionCookie(reply, token, req.protocol === "https");
 
     return reply.send({
       user: {
@@ -174,6 +192,9 @@ export async function registerAuthRoutes(
         email: user.email,
         displayName: user.displayName,
         avatarColor: user.avatarColor,
+        systemRole: user.systemRole,
+        accessLevel: user.accessLevel,
+        disabled: Boolean(user.disabled),
       },
     });
   });

@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type {
+  AccessLevel,
+  AdminUserSummary,
   CommentMessage,
   CommentThread,
   CommunityPluginEntry,
@@ -11,6 +13,7 @@ import type {
   ExecuteResponse,
   ExportFormat,
   Role,
+  SystemRole,
   User,
   Workspace,
   WorkspaceMember,
@@ -398,4 +401,58 @@ export const api = {
     if (isBrowserStandaloneMode()) return { plugins: [] };
     return requestJson<{ plugins: CommunityPluginEntry[] }>("/api/plugins/registry");
   },
+
+  adminListUsers: () =>
+    requestJson<{
+      users: AdminUserSummary[];
+      workspaces: Array<{ id: string; slug: string; name: string; ownerId: string }>;
+    }>("/api/admin/users"),
+  adminCreateUser: (payload: {
+    email: string;
+    displayName: string;
+    password: string;
+    systemRole: SystemRole;
+    accessLevel: AccessLevel;
+    disabled?: boolean;
+    workspaceId?: string;
+    workspaceRole?: Role;
+  }) =>
+    requestJson<{ user: AdminUserSummary }>("/api/admin/users", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  adminUpdateUser: (
+    userId: string,
+    payload: {
+      displayName?: string;
+      systemRole?: SystemRole;
+      accessLevel?: AccessLevel;
+      disabled?: boolean;
+      password?: string;
+    }
+  ) =>
+    requestJson<{ user: AdminUserSummary | null }>(`/api/admin/users/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  adminGetUserWorkspaces: (userId: string) =>
+    requestJson<{
+      memberships: Array<{
+        workspaceId: string;
+        name: string;
+        slug: string;
+        role: Role;
+        joinedAt: number;
+      }>;
+    }>(`/api/admin/users/${userId}/workspaces`),
+  adminAssignUserWorkspace: (userId: string, workspaceId: string, role: Role) =>
+    requestJson<{ workspaceId: string; userId: string; role: Role }>(
+      `/api/admin/users/${userId}/workspaces/${workspaceId}`,
+      { method: "PUT", body: JSON.stringify({ role }) }
+    ),
+  adminRemoveUserWorkspace: (userId: string, workspaceId: string) =>
+    requestJson<{ removed: boolean; userId: string; workspaceId: string }>(
+      `/api/admin/users/${userId}/workspaces/${workspaceId}`,
+      { method: "DELETE" }
+    ),
 };

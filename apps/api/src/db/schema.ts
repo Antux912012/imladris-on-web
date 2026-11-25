@@ -15,6 +15,9 @@ export const users = sqliteTable("users", {
   displayName: text("display_name").notNull(),
   passwordHash: text("password_hash").notNull(),
   avatarColor: text("avatar_color").notNull(),
+  systemRole: text("system_role").notNull().default("USER"),
+  accessLevel: text("access_level").notNull().default("FULL"),
+  disabled: integer("disabled", { mode: "boolean" }).notNull().default(false),
   createdAt: integer("created_at").notNull(),
 });
 

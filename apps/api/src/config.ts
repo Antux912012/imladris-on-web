@@ -16,6 +16,10 @@ export interface AppConfig {
   runnerExecTimeoutMs: number;
   aiLocalUrl: string;
   aiAllowCloud: boolean;
+  corsOrigins: string[];
+  adminEmail?: string;
+  adminPassword?: string;
+  adminDisplayName?: string;
   port: number;
   host: string;
 }
@@ -50,6 +54,13 @@ export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   );
   const aiLocalUrl = process.env.AI_LOCAL_URL ?? "http://imladris-ollama:11434";
   const aiAllowCloud = !airGappedMode && process.env.AI_ALLOW_CLOUD === "true";
+  const corsOrigins = (process.env.CORS_ORIGINS ?? publicUrl)
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+  const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase() || undefined;
+  const adminPassword = process.env.ADMIN_PASSWORD || undefined;
+  const adminDisplayName = process.env.ADMIN_DISPLAY_NAME?.trim() || "Administrator";
   const port = Number.parseInt(process.env.PORT ?? "3000", 10);
   const host = process.env.HOST ?? "0.0.0.0";
 
@@ -68,6 +79,10 @@ export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     runnerExecTimeoutMs: Number.isFinite(runnerExecTimeoutMs) ? runnerExecTimeoutMs : 60000,
     aiLocalUrl,
     aiAllowCloud,
+    corsOrigins,
+    adminEmail,
+    adminPassword,
+    adminDisplayName,
     port: Number.isFinite(port) ? port : 3000,
     host,
     ...overrides,

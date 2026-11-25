@@ -3,20 +3,34 @@
 
 services:
   proxy:
-    image: caddy:2.9-alpine
+    image: nginx:1.27-alpine
     restart: unless-stopped
     ports:
-      - "8080:80"
-    environment:
-      IMLADRIS_SITE: ":80"
+      - "${NGINX_HTTP_PORT:-8080}:80"
     volumes:
-      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
+      - ./infra/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - imladris-web
       - imladris-api
     networks:
       - imladris-edge
+
+  imladris-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-imladris}
+      POSTGRES_USER: ${POSTGRES_USER:-imladris}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-imladris-db-password}
+    volumes:
+      - imladris_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-imladris} -d ${POSTGRES_DB:-imladris}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - imladris-internal
 
   imladris-web:
     build:
@@ -34,20 +48,27 @@ services:
     environment:
       IMLADRIS_MODE: ${IMLADRIS_MODE:-local}
       AUTH_MODE: ${AUTH_MODE:-team}
+      REGISTRATION_MODE: ${REGISTRATION_MODE:-invite}
       PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production-32-chars}
       RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:-change-me-runner-secret}
-      DATABASE_URL: file:/data/db/imladris.sqlite
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-imladris}:${POSTGRES_PASSWORD:-imladris-db-password}@imladris-db:5432/${POSTGRES_DB:-imladris}}
       WORKSPACES_ROOT: /data/workspaces
       RUNNER_URL: http://imladris-runner:9000
       RUNNER_EXEC_TIMEOUT_MS: ${RUNNER_EXEC_TIMEOUT_MS:-60000}
       AI_LOCAL_URL: ${AI_LOCAL_URL:-http://imladris-ollama:11434}
       AI_ALLOW_CLOUD: ${AI_ALLOW_CLOUD:-false}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@imladris.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_DISPLAY_NAME: ${ADMIN_DISPLAY_NAME:-Administrator}
     volumes:
-      - imladris_db:/data/db
       - imladris_workspaces:/data/workspaces
     depends_on:
-      - imladris-runner
+      imladris-db:
+        condition: service_healthy
+      imladris-runner:
+        condition: service_started
     networks:
       - imladris-edge
       - imladris-internal
@@ -81,6 +102,5 @@ networks:
     internal: true
 
 volumes:
-  imladris_db:
+  imladris_pgdata:
   imladris_workspaces:
-  caddy_data:

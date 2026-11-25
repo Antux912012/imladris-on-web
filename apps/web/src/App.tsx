@@ -34,6 +34,11 @@ const HistoryModal = lazy(() =>
     default: m.HistoryModal,
   }))
 );
+const AdminPanelModal = lazy(() =>
+  import("./components/AdminPanelModal").then((m) => ({
+    default: m.AdminPanelModal,
+  }))
+);
 
 export function App() {
   const {
@@ -220,6 +225,7 @@ export function App() {
             useWorkspaceStore.getState().replaceEditorContent(content)
           }
         />
+        <AdminPanelModal />
       </Suspense>
       <DemoUpgradeModal />
     </div>

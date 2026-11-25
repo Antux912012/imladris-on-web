@@ -95,6 +95,11 @@ export async function registerWorkspaceRoutes(
   app.post("/api/workspaces", async (req, reply) => {
     const user = await requireAuth(req, reply, db, config);
     if (!user) return;
+    if (user.systemRole !== "ADMIN" && user.accessLevel !== "FULL") {
+      return reply.code(403).send({
+        error: `Account access level ${user.accessLevel} cannot create workspaces`,
+      });
+    }
 
     const parsed = CreateWorkspaceBody.safeParse(req.body);
     if (!parsed.success) {

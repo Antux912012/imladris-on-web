@@ -6,6 +6,12 @@ import { z } from "zod";
 export const RoleSchema = z.enum(["OWNER", "EDITOR", "REVIEWER", "VIEWER"]);
 export type Role = z.infer<typeof RoleSchema>;
 
+export const SystemRoleSchema = z.enum(["ADMIN", "USER"]);
+export type SystemRole = z.infer<typeof SystemRoleSchema>;
+
+export const AccessLevelSchema = z.enum(["FULL", "EDITOR", "REVIEWER", "VIEWER"]);
+export type AccessLevel = z.infer<typeof AccessLevelSchema>;
+
 export const KernelModeSchema = z.enum(["SHARED", "PERSONAL"]);
 export type KernelMode = z.infer<typeof KernelModeSchema>;
 
@@ -14,9 +20,25 @@ export const UserSchema = z.object({
   email: z.string().email(),
   displayName: z.string().min(1),
   avatarColor: z.string().min(4),
+  systemRole: SystemRoleSchema.default("USER").optional(),
+  accessLevel: AccessLevelSchema.default("FULL").optional(),
+  disabled: z.boolean().default(false).optional(),
   createdAt: z.string(),
 });
 export type User = z.infer<typeof UserSchema>;
+
+export const AdminUserSummarySchema = z.object({
+  id: z.string().min(1),
+  email: z.string().email(),
+  displayName: z.string().min(1),
+  avatarColor: z.string().min(4),
+  systemRole: SystemRoleSchema,
+  accessLevel: AccessLevelSchema,
+  disabled: z.boolean(),
+  createdAt: z.number(),
+  workspaceCount: z.number().int().nonnegative(),
+});
+export type AdminUserSummary = z.infer<typeof AdminUserSummarySchema>;
 
 export const WorkspaceSchema = z.object({
   id: z.string().min(1),
