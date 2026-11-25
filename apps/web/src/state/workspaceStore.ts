@@ -50,6 +50,8 @@ interface WorkspaceState {
   showPluginModal: boolean;
   showHistoryModal: boolean;
   showAdminModal: boolean;
+  showClassroomModal: boolean;
+  showSignModal: boolean;
   showDemoUpgradeModal: boolean;
   demoPromptShownOnce: boolean;
 
@@ -79,6 +81,8 @@ interface WorkspaceState {
   setShowPluginModal: (open: boolean) => void;
   setShowHistoryModal: (open: boolean) => void;
   setShowAdminModal: (open: boolean) => void;
+  setShowClassroomModal: (open: boolean) => void;
+  setShowSignModal: (open: boolean) => void;
   setShowDemoUpgradeModal: (open: boolean) => void;
   triggerDemoUpgradePrompt: () => void;
 }
@@ -108,6 +112,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   showPluginModal: false,
   showHistoryModal: false,
   showAdminModal: false,
+  showClassroomModal: false,
+  showSignModal: false,
 
   setUser: (user) => set({ user }),
   setWorkspaces: (workspaces) => set({ workspaces }),
@@ -177,6 +183,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   setShowPluginModal: (showPluginModal) => set({ showPluginModal }),
   setShowHistoryModal: (showHistoryModal) => set({ showHistoryModal }),
   setShowAdminModal: (showAdminModal) => set({ showAdminModal }),
+  setShowClassroomModal: (showClassroomModal) => set({ showClassroomModal }),
+  setShowSignModal: (showSignModal) => set({ showSignModal }),
   showDemoUpgradeModal: false,
   demoPromptShownOnce: false,
   setShowDemoUpgradeModal: (showDemoUpgradeModal) => set({ showDemoUpgradeModal }),

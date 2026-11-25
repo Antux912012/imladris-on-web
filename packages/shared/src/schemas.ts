@@ -45,19 +45,69 @@ export const WorkspaceSchema = z.object({
   slug: z.string().min(1),
   name: z.string().min(1),
   kernelMode: KernelModeSchema,
+  toolchainId: z.string().nullable().optional(),
   ownerId: z.string().min(1),
   role: RoleSchema.optional(),
   createdAt: z.string(),
 });
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const ExecuteEngineSchema = z.enum(["r", "python", "bash"]);
+export const SsoProtocolSchema = z.enum(["oidc", "orcid", "saml", "ldap"]);
+export type SsoProtocol = z.infer<typeof SsoProtocolSchema>;
+
+export const SsoProviderPublicSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  protocol: SsoProtocolSchema,
+});
+export type SsoProviderPublic = z.infer<typeof SsoProviderPublicSchema>;
+
+export const ToolchainProfileSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  language: z.enum(["python", "r", "julia", "quarto"]),
+  imageRef: z.string(),
+  packages: z.array(z.string()),
+  isDefault: z.boolean(),
+  enabled: z.boolean(),
+});
+export type ToolchainProfile = z.infer<typeof ToolchainProfileSchema>;
+
+export const ElectronicSignatureSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  relPath: z.string(),
+  userId: z.string().nullable(),
+  userEmail: z.string(),
+  userName: z.string(),
+  meaning: z.string(),
+  reason: z.string(),
+  sha256Hash: z.string(),
+  signatureHash: z.string(),
+  signedAt: z.number(),
+});
+export type ElectronicSignature = z.infer<typeof ElectronicSignatureSchema>;
+
+export const AuditEventRecordSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string().nullable(),
+  userId: z.string().nullable(),
+  userEmail: z.string().nullable(),
+  action: z.string(),
+  targetPath: z.string().nullable(),
+  payloadJson: z.string(),
+  createdAt: z.number(),
+});
+export type AuditEventRecord = z.infer<typeof AuditEventRecordSchema>;
+
+export const ExecuteEngineSchema = z.enum(["r", "python", "bash", "julia"]);
 export type ExecuteEngine = z.infer<typeof ExecuteEngineSchema>;
 
 export const ExecuteRequestSchema = z.object({
   engine: ExecuteEngineSchema,
   code: z.string(),
   chunkId: z.string().optional(),
+  toolchainId: z.string().optional(),
 });
 export type ExecuteRequest = z.infer<typeof ExecuteRequestSchema>;
 

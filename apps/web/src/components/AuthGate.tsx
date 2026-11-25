@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Antonio De Gaetano <antux912012@users.noreply.github.com>
 // SPDX-License-Identifier: Apache-2.0
 
-import { useState, type FormEvent } from "react";
-import type { User } from "@imladris/shared";
+import { useEffect, useState, type FormEvent } from "react";
+import type { SsoProviderPublic, User } from "@imladris/shared";
 import {
   api,
   getConfiguredServerUrl,
@@ -20,8 +20,13 @@ export function AuthGate({ onAuthenticated }: Props) {
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [inviteToken, setInviteToken] = useState("");
+  const [ssoProviders, setSsoProviders] = useState<SsoProviderPublic[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void api.listAuthProviders().then((res) => setSsoProviders(res.providers));
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -230,9 +235,21 @@ export function AuthGate({ onAuthenticated }: Props) {
         </form>
 
         <div
-          className="mt-4 border-t pt-4"
+          className="mt-4 space-y-2 border-t pt-4"
           style={{ borderColor: "var(--border-subtle)" }}
         >
+          {ssoProviders.map((prov) => (
+            <a
+              key={prov.id}
+              href={api.getSsoStartUrl(prov.id)}
+              className="ui-control flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold"
+            >
+              <span>
+                {prov.protocol === "orcid" ? "ORCID" : prov.protocol.toUpperCase()}
+              </span>
+              <span>Sign in with {prov.name}</span>
+            </a>
+          ))}
           <button
             type="button"
             onClick={handleBrowserStandalone}

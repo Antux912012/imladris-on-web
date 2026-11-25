@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS users (
   system_role TEXT NOT NULL DEFAULT 'USER',
   access_level TEXT NOT NULL DEFAULT 'FULL',
   disabled INTEGER NOT NULL DEFAULT 0,
+  auth_provider TEXT NOT NULL DEFAULT 'local',
+  external_subject TEXT,
   created_at INTEGER NOT NULL
 );
 
@@ -53,6 +55,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
   slug TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   kernel_mode TEXT NOT NULL DEFAULT 'SHARED',
+  toolchain_id TEXT,
   owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at INTEGER NOT NULL
 );
@@ -114,12 +117,91 @@ CREATE TABLE IF NOT EXISTS invite_tokens (
 
 CREATE TABLE IF NOT EXISTS audit_events (
   id TEXT PRIMARY KEY,
-  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
   user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   action TEXT NOT NULL,
   target_path TEXT,
   payload_json TEXT NOT NULL DEFAULT '{}',
   created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sso_providers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  protocol TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  issuer_url TEXT NOT NULL DEFAULT '',
+  client_id TEXT NOT NULL DEFAULT '',
+  client_secret TEXT NOT NULL DEFAULT '',
+  scopes TEXT NOT NULL DEFAULT 'openid profile email',
+  role_mapping_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS toolchain_profiles (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  language TEXT NOT NULL,
+  image_ref TEXT NOT NULL,
+  packages_json TEXT NOT NULL DEFAULT '[]',
+  is_default INTEGER NOT NULL DEFAULT 0,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS electronic_signatures (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  rel_path TEXT NOT NULL,
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  user_email TEXT NOT NULL,
+  user_name TEXT NOT NULL,
+  meaning TEXT NOT NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  sha256_hash TEXT NOT NULL,
+  signature_hash TEXT NOT NULL,
+  signed_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS courses (
+  id TEXT PRIMARY KEY,
+  code TEXT NOT NULL,
+  title TEXT NOT NULL,
+  term TEXT NOT NULL,
+  instructor_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  template_workspace_id TEXT REFERENCES workspaces(id) ON DELETE SET NULL,
+  lti_context_id TEXT,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS course_enrollments (
+  course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'STUDENT',
+  enrolled_at INTEGER NOT NULL,
+  PRIMARY KEY (course_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS assignments (
+  id TEXT PRIMARY KEY,
+  course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  instructions TEXT NOT NULL DEFAULT '',
+  due_at INTEGER,
+  locked INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS assignment_submissions (
+  id TEXT PRIMARY KEY,
+  assignment_id TEXT NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+  student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'IN_PROGRESS',
+  grade TEXT,
+  feedback TEXT,
+  snapshot_hash TEXT,
+  submitted_at INTEGER
 );
 `;
 
@@ -139,15 +221,19 @@ CREATE TABLE IF NOT EXISTS users (
 ALTER TABLE users ADD COLUMN IF NOT EXISTS system_role TEXT NOT NULL DEFAULT 'USER';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS access_level TEXT NOT NULL DEFAULT 'FULL';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS external_subject TEXT;
 
 CREATE TABLE IF NOT EXISTS workspaces (
   id TEXT PRIMARY KEY,
   slug TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   kernel_mode TEXT NOT NULL DEFAULT 'SHARED',
+  toolchain_id TEXT,
   owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at BIGINT NOT NULL
 );
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS toolchain_id TEXT;
 
 CREATE TABLE IF NOT EXISTS workspace_members (
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -206,12 +292,92 @@ CREATE TABLE IF NOT EXISTS invite_tokens (
 
 CREATE TABLE IF NOT EXISTS audit_events (
   id TEXT PRIMARY KEY,
-  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
   user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   action TEXT NOT NULL,
   target_path TEXT,
   payload_json TEXT NOT NULL DEFAULT '{}',
   created_at BIGINT NOT NULL
+);
+ALTER TABLE audit_events ALTER COLUMN workspace_id DROP NOT NULL;
+
+CREATE TABLE IF NOT EXISTS sso_providers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  protocol TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  issuer_url TEXT NOT NULL DEFAULT '',
+  client_id TEXT NOT NULL DEFAULT '',
+  client_secret TEXT NOT NULL DEFAULT '',
+  scopes TEXT NOT NULL DEFAULT 'openid profile email',
+  role_mapping_json TEXT NOT NULL DEFAULT '{}',
+  created_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS toolchain_profiles (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  language TEXT NOT NULL,
+  image_ref TEXT NOT NULL,
+  packages_json TEXT NOT NULL DEFAULT '[]',
+  is_default INTEGER NOT NULL DEFAULT 0,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS electronic_signatures (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  rel_path TEXT NOT NULL,
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  user_email TEXT NOT NULL,
+  user_name TEXT NOT NULL,
+  meaning TEXT NOT NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  sha256_hash TEXT NOT NULL,
+  signature_hash TEXT NOT NULL,
+  signed_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS courses (
+  id TEXT PRIMARY KEY,
+  code TEXT NOT NULL,
+  title TEXT NOT NULL,
+  term TEXT NOT NULL,
+  instructor_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  template_workspace_id TEXT REFERENCES workspaces(id) ON DELETE SET NULL,
+  lti_context_id TEXT,
+  created_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS course_enrollments (
+  course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'STUDENT',
+  enrolled_at BIGINT NOT NULL,
+  PRIMARY KEY (course_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS assignments (
+  id TEXT PRIMARY KEY,
+  course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  instructions TEXT NOT NULL DEFAULT '',
+  due_at BIGINT,
+  locked INTEGER NOT NULL DEFAULT 0,
+  created_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS assignment_submissions (
+  id TEXT PRIMARY KEY,
+  assignment_id TEXT NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+  student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'IN_PROGRESS',
+  grade TEXT,
+  feedback TEXT,
+  snapshot_hash TEXT,
+  submitted_at BIGINT
 );
 `;
 
@@ -329,6 +495,22 @@ export async function createDb(databaseUrl: string): Promise<{
     sqlite.exec(
       "ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0"
     );
+  }
+  if (!userColNames.has("auth_provider")) {
+    sqlite.exec(
+      "ALTER TABLE users ADD COLUMN auth_provider TEXT NOT NULL DEFAULT 'local'"
+    );
+  }
+  if (!userColNames.has("external_subject")) {
+    sqlite.exec("ALTER TABLE users ADD COLUMN external_subject TEXT");
+  }
+
+  const wsCols = sqlite
+    .prepare("PRAGMA table_info(workspaces)")
+    .all() as Array<{ name: string }>;
+  const wsColNames = new Set(wsCols.map((c) => c.name));
+  if (!wsColNames.has("toolchain_id")) {
+    sqlite.exec("ALTER TABLE workspaces ADD COLUMN toolchain_id TEXT");
   }
 
   const db = drizzle(

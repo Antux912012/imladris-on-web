@@ -2,8 +2,26 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import type { AccessLevel, AdminUserSummary, Role, SystemRole } from "@imladris/shared";
-import { KeyRound, Shield, UserCheck, UserPlus, UserX, X } from "lucide-react";
+import type {
+  AccessLevel,
+  AdminUserSummary,
+  AuditEventRecord,
+  Role,
+  SsoProtocol,
+  SystemRole,
+  ToolchainProfile,
+} from "@imladris/shared";
+import {
+  Container,
+  Download,
+  KeyRound,
+  ScrollText,
+  Shield,
+  UserCheck,
+  UserPlus,
+  UserX,
+  X,
+} from "lucide-react";
 import { api } from "../lib/api";
 import { useWorkspaceStore } from "../state/workspaceStore";
 
@@ -31,12 +49,39 @@ const ACCESS_LEVEL_LABELS: Record<AccessLevel, string> = {
 
 export function AdminPanelModal() {
   const { user, showAdminModal, setShowAdminModal } = useWorkspaceStore();
+  const [activeTab, setActiveTab] = useState<"users" | "sso" | "toolchains" | "audit">("users");
   const [users, setUsers] = useState<AdminUserSummary[]>([]);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
+  const [ssoProviders, setSsoProviders] = useState<
+    Array<{
+      id: string;
+      name: string;
+      protocol: SsoProtocol;
+      enabled: boolean;
+      issuerUrl: string;
+      clientId: string;
+    }>
+  >([]);
+  const [toolchains, setToolchains] = useState<ToolchainProfile[]>([]);
+  const [auditEvents, setAuditEvents] = useState<AuditEventRecord[]>([]);
+  const [auditFilter, setAuditFilter] = useState("");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+
+  // SSO creation form
+  const [ssoName, setSsoName] = useState("");
+  const [ssoProtocol, setSsoProtocol] = useState<SsoProtocol>("oidc");
+  const [ssoIssuer, setSsoIssuer] = useState("");
+  const [ssoClientId, setSsoClientId] = useState("");
+  const [ssoClientSecret, setSsoClientSecret] = useState("");
+
+  // Toolchain creation form
+  const [tcName, setTcName] = useState("");
+  const [tcLang, setTcLang] = useState<"python" | "r" | "julia" | "quarto">("python");
+  const [tcImage, setTcImage] = useState("");
+  const [tcPackages, setTcPackages] = useState("");
 
   // Create user form state
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -62,15 +107,23 @@ export function AdminPanelModal() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.adminListUsers();
-      setUsers(res.users);
-      setWorkspaces(res.workspaces);
+      const [userRes, ssoRes, tcRes, auditRes] = await Promise.all([
+        api.adminListUsers(),
+        api.adminListSsoProviders(),
+        api.adminListToolchains(),
+        api.adminListAudit(auditFilter || undefined),
+      ]);
+      setUsers(userRes.users);
+      setWorkspaces(userRes.workspaces);
+      setSsoProviders(ssoRes.providers);
+      setToolchains(tcRes.toolchains);
+      setAuditEvents(auditRes.events);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load admin data");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [auditFilter]);
 
   useEffect(() => {
     if (!showAdminModal) return;
@@ -237,6 +290,32 @@ export function AdminPanelModal() {
           </button>
         </div>
 
+        <div className="mt-4 flex flex-wrap gap-2 border-b pb-3" style={{ borderColor: "var(--border-subtle)" }}>
+          {(
+            [
+              ["users", "Users & Access"],
+              ["sso", "SSO & Identity (OIDC/ORCID)"],
+              ["toolchains", "Container Toolchains"],
+              ["audit", "Compliance Audit Log"],
+            ] as const
+          ).map(([tabId, label]) => (
+            <button
+              key={tabId}
+              type="button"
+              onClick={() => setActiveTab(tabId)}
+              className="rounded-lg px-3 py-1.5 text-xs font-semibold"
+              style={{
+                backgroundColor: activeTab === tabId ? "var(--accent)" : "var(--bg-sidebar)",
+                color: activeTab === tabId ? "var(--accent-fg)" : "var(--fg-primary)",
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === "users" && (
+          <>
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div
             className="rounded-lg p-3"
@@ -696,6 +775,291 @@ export function AdminPanelModal() {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        )}
+          </>
+        )}
+
+        {activeTab === "sso" && (
+          <div className="mt-4 space-y-4">
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setError(null);
+                try {
+                  await api.adminCreateSsoProvider({
+                    name: ssoName.trim(),
+                    protocol: ssoProtocol,
+                    issuerUrl: ssoIssuer.trim(),
+                    clientId: ssoClientId.trim(),
+                    clientSecret: ssoClientSecret,
+                    scopes: ssoProtocol === "orcid" ? "/authenticate" : "openid profile email",
+                  });
+                  setSsoName("");
+                  setSsoIssuer("");
+                  setSsoClientId("");
+                  setSsoClientSecret("");
+                  setStatusMsg("SSO provider added.");
+                  await loadAdminData();
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Failed to add SSO provider");
+                }
+              }}
+              className="grid gap-3 rounded-xl p-4 sm:grid-cols-2 lg:grid-cols-5"
+              style={{ backgroundColor: "var(--bg-sidebar)", border: "1px solid var(--border-subtle)" }}
+            >
+              <input
+                type="text"
+                required
+                placeholder="Display Name (e.g. University OIDC)"
+                value={ssoName}
+                onChange={(e) => setSsoName(e.target.value)}
+                className="rounded px-2.5 py-1.5 text-xs outline-none"
+                style={{ backgroundColor: "var(--bg-window)", border: "1px solid var(--border-subtle)" }}
+              />
+              <select
+                value={ssoProtocol}
+                onChange={(e) => setSsoProtocol(e.target.value as SsoProtocol)}
+                className="ui-control rounded px-2 py-1.5 text-xs"
+              >
+                <option value="oidc">OIDC (Keycloak / Entra / Okta)</option>
+                <option value="orcid">ORCID</option>
+                <option value="saml">SAML 2.0</option>
+                <option value="ldap">LDAP / AD</option>
+              </select>
+              <input
+                type="text"
+                placeholder="Issuer URL (e.g. https://orcid.org)"
+                value={ssoIssuer}
+                onChange={(e) => setSsoIssuer(e.target.value)}
+                className="rounded px-2.5 py-1.5 text-xs outline-none"
+                style={{ backgroundColor: "var(--bg-window)", border: "1px solid var(--border-subtle)" }}
+              />
+              <input
+                type="text"
+                placeholder="Client ID"
+                value={ssoClientId}
+                onChange={(e) => setSsoClientId(e.target.value)}
+                className="rounded px-2.5 py-1.5 text-xs outline-none"
+                style={{ backgroundColor: "var(--bg-window)", border: "1px solid var(--border-subtle)" }}
+              />
+              <div className="flex gap-1.5">
+                <input
+                  type="password"
+                  placeholder="Client Secret"
+                  value={ssoClientSecret}
+                  onChange={(e) => setSsoClientSecret(e.target.value)}
+                  className="min-w-0 flex-1 rounded px-2.5 py-1.5 text-xs outline-none"
+                  style={{ backgroundColor: "var(--bg-window)", border: "1px solid var(--border-subtle)" }}
+                />
+                <button
+                  type="submit"
+                  className="rounded px-3 py-1.5 text-xs font-semibold"
+                  style={{ backgroundColor: "var(--accent)", color: "var(--accent-fg)" }}
+                >
+                  Add
+                </button>
+              </div>
+            </form>
+
+            <div className="space-y-2">
+              {ssoProviders.map((p) => (
+                <div
+                  key={p.id}
+                  className="flex items-center justify-between rounded-lg px-3 py-2 text-xs"
+                  style={{ backgroundColor: "var(--bg-sidebar)", border: "1px solid var(--border-subtle)" }}
+                >
+                  <div>
+                    <span className="font-semibold">{p.name}</span>{" "}
+                    <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase" style={{ backgroundColor: "var(--bg-surface)" }}>
+                      {p.protocol}
+                    </span>
+                    <div className="text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                      {p.issuerUrl || "No issuer URL"} · Client: {p.clientId || "—"}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void api.adminToggleSsoProvider(p.id, !p.enabled).then(loadAdminData)}
+                      className="ui-control rounded px-2.5 py-1 text-[11px]"
+                    >
+                      {p.enabled ? "Disable" : "Enable"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void api.adminDeleteSsoProvider(p.id).then(loadAdminData)}
+                      className="ui-control rounded px-2.5 py-1 text-[11px]"
+                      style={{ color: "var(--danger)" }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "toolchains" && (
+          <div className="mt-4 space-y-4">
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setError(null);
+                try {
+                  await api.adminCreateToolchain({
+                    name: tcName.trim(),
+                    language: tcLang,
+                    imageRef: tcImage.trim(),
+                    packages: tcPackages.split(",").map((s) => s.trim()).filter(Boolean),
+                  });
+                  setTcName("");
+                  setTcImage("");
+                  setTcPackages("");
+                  setStatusMsg("Toolchain profile registered.");
+                  await loadAdminData();
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Failed to register toolchain");
+                }
+              }}
+              className="grid gap-3 rounded-xl p-4 sm:grid-cols-2 lg:grid-cols-4"
+              style={{ backgroundColor: "var(--bg-sidebar)", border: "1px solid var(--border-subtle)" }}
+            >
+              <input
+                type="text"
+                required
+                placeholder="Profile Name (e.g. R 4.4 Genomics)"
+                value={tcName}
+                onChange={(e) => setTcName(e.target.value)}
+                className="rounded px-2.5 py-1.5 text-xs outline-none"
+                style={{ backgroundColor: "var(--bg-window)", border: "1px solid var(--border-subtle)" }}
+              />
+              <select
+                value={tcLang}
+                onChange={(e) => setTcLang(e.target.value as "python" | "r" | "julia" | "quarto")}
+                className="ui-control rounded px-2 py-1.5 text-xs"
+              >
+                <option value="python">Python</option>
+                <option value="r">R</option>
+                <option value="julia">Julia</option>
+                <option value="quarto">Quarto</option>
+              </select>
+              <input
+                type="text"
+                required
+                placeholder="Container Image (ghcr.io/...)"
+                value={tcImage}
+                onChange={(e) => setTcImage(e.target.value)}
+                className="rounded px-2.5 py-1.5 text-xs outline-none"
+                style={{ backgroundColor: "var(--bg-window)", border: "1px solid var(--border-subtle)" }}
+              />
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  placeholder="Packages (comma-separated)"
+                  value={tcPackages}
+                  onChange={(e) => setTcPackages(e.target.value)}
+                  className="min-w-0 flex-1 rounded px-2.5 py-1.5 text-xs outline-none"
+                  style={{ backgroundColor: "var(--bg-window)", border: "1px solid var(--border-subtle)" }}
+                />
+                <button
+                  type="submit"
+                  className="rounded px-3 py-1.5 text-xs font-semibold"
+                  style={{ backgroundColor: "var(--accent)", color: "var(--accent-fg)" }}
+                >
+                  Add
+                </button>
+              </div>
+            </form>
+
+            <div className="space-y-2">
+              {toolchains.map((tc) => (
+                <div
+                  key={tc.id}
+                  className="flex items-center justify-between rounded-lg px-3 py-2 text-xs"
+                  style={{ backgroundColor: "var(--bg-sidebar)", border: "1px solid var(--border-subtle)" }}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Container className="h-4 w-4" style={{ color: "var(--accent)" }} />
+                    <div>
+                      <div className="font-semibold">
+                        {tc.name} <span className="font-mono text-[10px]">({tc.language})</span>
+                      </div>
+                      <div className="font-mono text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                        {tc.imageRef} · [{tc.packages.join(", ")}]
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void api.adminToggleToolchain(tc.id, !tc.enabled).then(loadAdminData)}
+                    className="ui-control rounded px-2.5 py-1 text-[11px]"
+                  >
+                    {tc.enabled ? "Disable" : "Enable"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "audit" && (
+          <div className="mt-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <ScrollText className="h-4 w-4" style={{ color: "var(--accent)" }} />
+                <input
+                  type="text"
+                  value={auditFilter}
+                  onChange={(e) => setAuditFilter(e.target.value)}
+                  placeholder="Filter by action (e.g. document_signed, login)..."
+                  className="w-64 rounded px-2.5 py-1.5 text-xs outline-none"
+                  style={{ backgroundColor: "var(--bg-window)", border: "1px solid var(--border-subtle)" }}
+                />
+              </div>
+              <div className="flex gap-2">
+                <a
+                  href={api.getAuditExportUrl("csv")}
+                  className="ui-control inline-flex items-center gap-1 rounded px-3 py-1.5 text-xs font-medium"
+                >
+                  <Download className="h-3.5 w-3.5" /> Export CSV
+                </a>
+                <a
+                  href={api.getAuditExportUrl("json")}
+                  className="ui-control inline-flex items-center gap-1 rounded px-3 py-1.5 text-xs font-medium"
+                >
+                  <Download className="h-3.5 w-3.5" /> Export JSON
+                </a>
+              </div>
+            </div>
+
+            <div className="max-h-96 overflow-y-auto rounded-xl" style={{ border: "1px solid var(--border-subtle)" }}>
+              <table className="w-full border-collapse text-left text-xs">
+                <thead>
+                  <tr style={{ backgroundColor: "var(--bg-sidebar)", borderBottom: "1px solid var(--border-subtle)" }}>
+                    <th className="px-3 py-2 font-semibold">Timestamp</th>
+                    <th className="px-3 py-2 font-semibold">Action</th>
+                    <th className="px-3 py-2 font-semibold">Actor</th>
+                    <th className="px-3 py-2 font-semibold">Target / Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditEvents.map((ev) => (
+                    <tr key={ev.id} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                      <td className="px-3 py-2 font-mono text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                        {new Date(ev.createdAt).toLocaleString()}
+                      </td>
+                      <td className="px-3 py-2 font-semibold">{ev.action}</td>
+                      <td className="px-3 py-2">{ev.userEmail ?? ev.userId ?? "system"}</td>
+                      <td className="px-3 py-2 font-mono text-[11px]" style={{ color: "var(--fg-muted)" }}>
+                        {ev.targetPath ? `${ev.targetPath} · ` : ""}{ev.payloadJson}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

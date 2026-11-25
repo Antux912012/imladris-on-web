@@ -16,6 +16,10 @@ import { users } from "./db/schema.js";
 import { hashPassword } from "./auth/password.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerAdminRoutes } from "./routes/admin.js";
+import { registerSsoRoutes } from "./routes/sso.js";
+import { registerToolchainRoutes, seedDefaultToolchains } from "./routes/toolchains.js";
+import { registerComplianceRoutes } from "./routes/compliance.js";
+import { registerClassroomRoutes } from "./routes/classroom.js";
 import { registerWorkspaceRoutes } from "./routes/workspaces.js";
 import { registerFileRoutes } from "./routes/files.js";
 import { registerExecuteRoutes } from "./routes/execute.js";
@@ -68,6 +72,7 @@ export async function buildApp(overrides: Partial<AppConfig> = {}): Promise<Buil
   const config = loadConfig(overrides);
   const { db, close: closeDb } = await createDb(config.databaseUrl);
   await seedInitialAdmin(db, config);
+  await seedDefaultToolchains(db);
   const eventBus = new WorkspaceEventBus();
   const hocuspocus = createHocuspocusServer(db, config, eventBus);
 
@@ -114,6 +119,10 @@ export async function buildApp(overrides: Partial<AppConfig> = {}): Promise<Buil
 
   await registerAuthRoutes(app, db, config);
   await registerAdminRoutes(app, db, config);
+  await registerSsoRoutes(app, db, config);
+  await registerToolchainRoutes(app, db, config);
+  await registerComplianceRoutes(app, db, config);
+  await registerClassroomRoutes(app, db, config);
   await registerWorkspaceRoutes(app, db, config, eventBus, hocuspocus);
   await registerFileRoutes(app, db, config);
   await registerExecuteRoutes(app, db, config, eventBus);

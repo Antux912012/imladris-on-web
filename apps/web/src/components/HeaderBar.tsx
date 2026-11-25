@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Antonio De Gaetano <antux912012@users.noreply.github.com>
 // SPDX-License-Identifier: Apache-2.0
 
+import { useEffect, useState } from "react";
+import type { ToolchainProfile } from "@imladris/shared";
 import {
   Play,
   Share2,
@@ -13,6 +15,8 @@ import {
   LayoutGrid,
   History,
   Shield,
+  GraduationCap,
+  FileSignature,
 } from "lucide-react";
 import { parseChunks } from "@imladris/shared";
 import { api, isBrowserStandaloneMode } from "../lib/api";
@@ -46,8 +50,42 @@ export function HeaderBar({ onCreateWorkspace, onLogout }: Props) {
     setShowPluginModal,
     setShowHistoryModal,
     setShowAdminModal,
+    setShowClassroomModal,
+    setShowSignModal,
     setShowDemoUpgradeModal,
   } = useWorkspaceStore();
+
+  const [toolchains, setToolchains] = useState<ToolchainProfile[]>([]);
+  const [selectedToolchain, setSelectedToolchain] = useState<string>(
+    activeWorkspace?.toolchainId ?? ""
+  );
+
+  useEffect(() => {
+    setSelectedToolchain(activeWorkspace?.toolchainId ?? "");
+  }, [activeWorkspace?.id, activeWorkspace?.toolchainId]);
+
+  useEffect(() => {
+    if (isBrowserStandaloneMode()) return;
+    void api
+      .listToolchains()
+      .then((res) => setToolchains(res.toolchains))
+      .catch(() => {});
+  }, []);
+
+  async function handleToolchainChange(tcId: string) {
+    setSelectedToolchain(tcId);
+    if (!activeWorkspace || !tcId) return;
+    try {
+      await api.pinWorkspaceToolchain(activeWorkspace.id, tcId);
+      setActiveWorkspace({ ...activeWorkspace, toolchainId: tcId });
+      appendConsole("info", `Switched workspace toolchain to ${tcId}.`);
+    } catch (err) {
+      appendConsole(
+        "stderr",
+        err instanceof Error ? err.message : "Failed to switch toolchain"
+      );
+    }
+  }
 
   async function handleRunAllChunks() {
     if (!activeWorkspace) return;
@@ -234,6 +272,46 @@ export function HeaderBar({ onCreateWorkspace, onLogout }: Props) {
             }}
           >
             Download / Self-Host
+          </button>
+        )}
+
+        {!isBrowserStandaloneMode() && toolchains.length > 0 && activeWorkspace && (
+          <select
+            aria-label="Workspace Toolchain"
+            value={selectedToolchain || (toolchains.find((t) => t.isDefault)?.id ?? "")}
+            onChange={(e) => void handleToolchainChange(e.target.value)}
+            title="Select Containerized Toolchain"
+            className="ui-control hidden max-w-[155px] rounded-md px-2 py-1 text-xs xl:block"
+          >
+            {toolchains.map((tc) => (
+              <option key={tc.id} value={tc.id}>
+                {tc.language.toUpperCase()}: {tc.name.split("+")[0]?.trim()}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {!isBrowserStandaloneMode() && (
+          <button
+            type="button"
+            onClick={() => setShowClassroomModal(true)}
+            title="Classroom & Lab Assignments"
+            className="ui-control flex items-center gap-1 rounded-md px-2 py-1 text-xs"
+          >
+            <GraduationCap className="h-3.5 w-3.5" />
+            <span className="hidden xl:inline">Classroom</span>
+          </button>
+        )}
+
+        {!isBrowserStandaloneMode() && activeWorkspace && (
+          <button
+            type="button"
+            onClick={() => setShowSignModal(true)}
+            title="21 CFR Part 11 Electronic Signature"
+            className="ui-control flex items-center gap-1 rounded-md px-2 py-1 text-xs"
+          >
+            <FileSignature className="h-3.5 w-3.5" />
+            <span className="hidden xl:inline">Sign</span>
           </button>
         )}
 

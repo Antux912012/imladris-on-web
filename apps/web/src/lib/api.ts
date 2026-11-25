@@ -4,16 +4,21 @@
 import type {
   AccessLevel,
   AdminUserSummary,
+  AuditEventRecord,
   CommentMessage,
   CommentThread,
   CommunityPluginEntry,
   DocumentSnapshotMeta,
+  ElectronicSignature,
   EnvVariable,
   ExecuteEngine,
   ExecuteResponse,
   ExportFormat,
   Role,
+  SsoProtocol,
+  SsoProviderPublic,
   SystemRole,
+  ToolchainProfile,
   User,
   Workspace,
   WorkspaceMember,
@@ -454,5 +459,168 @@ export const api = {
     requestJson<{ removed: boolean; userId: string; workspaceId: string }>(
       `/api/admin/users/${userId}/workspaces/${workspaceId}`,
       { method: "DELETE" }
+    ),
+
+  // 1. SSO & Identity
+  listAuthProviders: async () => {
+    try {
+      return await requestJson<{ providers: SsoProviderPublic[] }>("/api/auth/providers");
+    } catch {
+      return { providers: [] };
+    }
+  },
+  getSsoStartUrl: (providerId: string) => resolveApiUrl(`/api/auth/sso/${providerId}/start`),
+  adminListSsoProviders: () =>
+    requestJson<{
+      providers: Array<{
+        id: string;
+        name: string;
+        protocol: SsoProtocol;
+        enabled: boolean;
+        issuerUrl: string;
+        clientId: string;
+        scopes: string;
+        roleMappingJson: string;
+      }>;
+    }>("/api/admin/sso/providers"),
+  adminCreateSsoProvider: (payload: {
+    name: string;
+    protocol: SsoProtocol;
+    issuerUrl: string;
+    clientId: string;
+    clientSecret: string;
+    scopes: string;
+  }) =>
+    requestJson<{ provider: { id: string } }>("/api/admin/sso/providers", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  adminToggleSsoProvider: (id: string, enabled: boolean) =>
+    requestJson<{ ok: boolean }>(`/api/admin/sso/providers/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled }),
+    }),
+  adminDeleteSsoProvider: (id: string) =>
+    requestJson<{ deleted: boolean }>(`/api/admin/sso/providers/${id}`, {
+      method: "DELETE",
+    }),
+
+  // 2. Classroom & Assignments
+  listCourses: () =>
+    requestJson<{
+      courses: Array<{
+        id: string;
+        code: string;
+        title: string;
+        term: string;
+        templateWorkspaceId: string | null;
+        myRole: string;
+      }>;
+    }>("/api/classroom/courses"),
+  createCourse: (payload: {
+    code: string;
+    title: string;
+    term: string;
+    templateWorkspaceId?: string;
+  }) =>
+    requestJson<{ course: { id: string; code: string; title: string } }>(
+      "/api/classroom/courses",
+      { method: "POST", body: JSON.stringify(payload) }
+    ),
+  syncCourseRoster: (
+    courseId: string,
+    members: Array<{ email: string; displayName: string; role: "INSTRUCTOR" | "TA" | "STUDENT" }>
+  ) =>
+    requestJson<{ enrolled: number }>(`/api/classroom/courses/${courseId}/roster`, {
+      method: "POST",
+      body: JSON.stringify({ members }),
+    }),
+  listCourseAssignments: (courseId: string) =>
+    requestJson<{
+      assignments: Array<{
+        id: string;
+        title: string;
+        instructions: string;
+        dueAt: number | null;
+        locked: boolean;
+        submissions: Array<{
+          id: string;
+          studentId: string;
+          studentEmail: string;
+          studentName: string;
+          workspaceId: string;
+          status: string;
+          grade: string | null;
+          feedback: string | null;
+          snapshotHash: string | null;
+          submittedAt: number | null;
+        }>;
+      }>;
+    }>(`/api/classroom/courses/${courseId}/assignments`),
+  createCourseAssignment: (
+    courseId: string,
+    payload: { title: string; instructions: string }
+  ) =>
+    requestJson<{ assignment: { id: string }; forksCreated: number }>(
+      `/api/classroom/courses/${courseId}/assignments`,
+      { method: "POST", body: JSON.stringify(payload) }
+    ),
+  submitAssignment: (assignmentId: string) =>
+    requestJson<{ status: string; snapshotHash: string; submittedAt: number }>(
+      `/api/classroom/assignments/${assignmentId}/submit`,
+      { method: "POST" }
+    ),
+  gradeSubmission: (submissionId: string, grade: string, feedback: string) =>
+    requestJson<{ ok: boolean }>(`/api/classroom/submissions/${submissionId}/grade`, {
+      method: "POST",
+      body: JSON.stringify({ grade, feedback }),
+    }),
+
+  // 3. Multi-Environment Toolchains
+  listToolchains: async () => {
+    if (isBrowserStandaloneMode()) return { toolchains: [] as ToolchainProfile[] };
+    return requestJson<{ toolchains: ToolchainProfile[] }>("/api/toolchains");
+  },
+  pinWorkspaceToolchain: (workspaceId: string, toolchainId: string) =>
+    requestJson<{ workspaceId: string; toolchainId: string }>(
+      `/api/workspaces/${workspaceId}/toolchain`,
+      { method: "PATCH", body: JSON.stringify({ toolchainId }) }
+    ),
+  adminListToolchains: () =>
+    requestJson<{ toolchains: ToolchainProfile[] }>("/api/admin/toolchains"),
+  adminCreateToolchain: (payload: {
+    name: string;
+    language: "python" | "r" | "julia" | "quarto";
+    imageRef: string;
+    packages: string[];
+  }) =>
+    requestJson<{ toolchain: ToolchainProfile }>("/api/admin/toolchains", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  adminToggleToolchain: (id: string, enabled: boolean) =>
+    requestJson<{ ok: boolean }>(`/api/admin/toolchains/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled }),
+    }),
+
+  // 4. Compliance Audit & 21 CFR Part 11 Electronic Signatures
+  adminListAudit: (action?: string) =>
+    requestJson<{ events: AuditEventRecord[] }>(
+      `/api/admin/audit?limit=150${action ? `&action=${encodeURIComponent(action)}` : ""}`
+    ),
+  getAuditExportUrl: (format: "csv" | "json") =>
+    resolveApiUrl(`/api/admin/audit/export?format=${format}`),
+  listSignatures: (workspaceId: string, relPath?: string) =>
+    requestJson<{ signatures: ElectronicSignature[] }>(
+      `/api/workspaces/${workspaceId}/signatures${relPath ? `?path=${encodeURIComponent(relPath)}` : ""}`
+    ),
+  signDocument: (
+    workspaceId: string,
+    payload: { path: string; meaning: string; reason: string; password: string }
+  ) =>
+    requestJson<{ signature: ElectronicSignature }>(
+      `/api/workspaces/${workspaceId}/signatures`,
+      { method: "POST", body: JSON.stringify(payload) }
     ),
 };

@@ -135,7 +135,12 @@ class KernelSession:
         started = time.monotonic()
         self.last_used = started
         env = sanitize_env(self.workspace_dir)
-        cmd = ["bash", "-lc", code] if engine == "bash" else ["Rscript", "-e", code]
+        if engine == "bash":
+            cmd = ["bash", "-lc", code]
+        elif engine == "julia":
+            cmd = ["julia", "-e", code]
+        else:
+            cmd = ["Rscript", "-e", code]
         proc: asyncio.subprocess.Process | None = None
         try:
             proc = await asyncio.create_subprocess_exec(

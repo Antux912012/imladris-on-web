@@ -6,24 +6,36 @@ import type { FastifyInstance } from "fastify";
 import { ExecuteRequestSchema, ExecuteResponseSchema } from "@imladris/shared";
 import type { AppConfig } from "../config.js";
 import type { AppDb } from "../db/client.js";
-import { workspaces } from "../db/schema.js";
+import { toolchainProfiles, workspaces } from "../db/schema.js";
 import { requireWorkspacePermission } from "../auth/rbac.js";
+import { recordAuditEvent } from "../audit/logger.js";
 import type { WorkspaceEventBus } from "../ws/events.js";
 
 export async function resolveSessionContext(
   db: AppDb,
   workspaceId: string,
   userId: string
-): Promise<{ sessionKey: string; isPersonal: boolean }> {
+): Promise<{ sessionKey: string; isPersonal: boolean; toolchainId: string | null }> {
   const [ws] = await db
-    .select({ kernelMode: workspaces.kernelMode })
+    .select({
+      kernelMode: workspaces.kernelMode,
+      toolchainId: workspaces.toolchainId,
+    })
     .from(workspaces)
     .where(eq(workspaces.id, workspaceId))
     .limit(1);
   if (ws?.kernelMode.toUpperCase() === "PERSONAL") {
-    return { sessionKey: `${workspaceId}:${userId}`, isPersonal: true };
+    return {
+      sessionKey: `${workspaceId}:${userId}`,
+      isPersonal: true,
+      toolchainId: ws.toolchainId ?? null,
+    };
   }
-  return { sessionKey: `${workspaceId}:shared`, isPersonal: false };
+  return {
+    sessionKey: `${workspaceId}:shared`,
+    isPersonal: false,
+    toolchainId: ws?.toolchainId ?? null,
+  };
 }
 
 export async function registerExecuteRoutes(
@@ -42,7 +54,19 @@ export async function registerExecuteRoutes(
       return reply.code(400).send({ error: "Invalid execute payload" });
     }
 
-    const { sessionKey, isPersonal } = await resolveSessionContext(db, id, auth.user.id);
+    const { sessionKey, isPersonal, toolchainId: wsToolchainId } =
+      await resolveSessionContext(db, id, auth.user.id);
+    const activeToolchainId = parsed.data.toolchainId ?? wsToolchainId;
+    let toolchainImage: string | undefined;
+    if (activeToolchainId) {
+      const [tc] = await db
+        .select({ imageRef: toolchainProfiles.imageRef })
+        .from(toolchainProfiles)
+        .where(eq(toolchainProfiles.id, activeToolchainId))
+        .limit(1);
+      toolchainImage = tc?.imageRef;
+    }
+
     let resp: Response;
     try {
       resp = await fetch(`${config.runnerUrl}/execute`, {
@@ -57,6 +81,8 @@ export async function registerExecuteRoutes(
           engine: parsed.data.engine,
           code: parsed.data.code,
           timeoutMs: config.runnerExecTimeoutMs,
+          ...(activeToolchainId ? { toolchainId: activeToolchainId } : {}),
+          ...(toolchainImage ? { toolchainImage } : {}),
         }),
         signal: AbortSignal.timeout(config.runnerExecTimeoutMs + 5000),
       });
@@ -98,6 +124,16 @@ export async function registerExecuteRoutes(
       bus.publish(id, { type: "plot", payload: { plots: result.plots } }, targetUser);
     }
     bus.publish(id, { type: "env_updated", payload: { variables: envVars } }, targetUser);
+    await recordAuditEvent(db, {
+      workspaceId: id,
+      userId: auth.user.id,
+      action: "code_executed",
+      payload: {
+        engine: parsed.data.engine,
+        toolchainId: activeToolchainId ?? "default",
+        ok: result.ok,
+      },
+    });
 
     return reply.send({ ...result, env: envVars });
   });

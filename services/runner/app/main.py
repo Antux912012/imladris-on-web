@@ -32,9 +32,11 @@ app = FastAPI(title="Imladris Runner", version="0.1.0", lifespan=lifespan)
 class ExecutePayload(BaseModel):
     workspaceId: str
     sessionKey: str
-    engine: Literal["python", "r", "bash"] = "python"
+    engine: Literal["python", "r", "bash", "julia"] = "python"
     code: str
     timeoutMs: int = Field(default=60000, ge=100, le=300000)
+    toolchainId: str | None = None
+    toolchainImage: str | None = None
 
 
 class RestartPayload(BaseModel):
@@ -60,10 +62,19 @@ async def health() -> dict[str, object]:
 async def execute_code(payload: ExecutePayload) -> dict[str, object]:
     await sessions.prune_idle()
     ws_dir = resolve_workspace_cwd(payload.workspaceId)
-    session = sessions.get_or_create(payload.sessionKey, ws_dir)
+    session_key = (
+        f"{payload.sessionKey}:{payload.toolchainId}"
+        if payload.toolchainId
+        else payload.sessionKey
+    )
+    session = sessions.get_or_create(session_key, ws_dir)
     if payload.engine == "python":
-        return await session.execute_python(payload.code, payload.timeoutMs)
-    return await session.execute_shell(payload.engine, payload.code, payload.timeoutMs)
+        res = await session.execute_python(payload.code, payload.timeoutMs)
+    else:
+        res = await session.execute_shell(payload.engine, payload.code, payload.timeoutMs)
+    if payload.toolchainId:
+        res["toolchainId"] = payload.toolchainId
+    return res
 
 
 @app.post("/restart", dependencies=[Depends(verify_runner_secret)])

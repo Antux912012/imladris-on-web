@@ -39,6 +39,16 @@ const AdminPanelModal = lazy(() =>
     default: m.AdminPanelModal,
   }))
 );
+const ClassroomModal = lazy(() =>
+  import("./components/ClassroomModal").then((m) => ({
+    default: m.ClassroomModal,
+  }))
+);
+const ComplianceSignModal = lazy(() =>
+  import("./components/ComplianceSignModal").then((m) => ({
+    default: m.ComplianceSignModal,
+  }))
+);
 
 export function App() {
   const {
@@ -226,6 +236,8 @@ export function App() {
           }
         />
         <AdminPanelModal />
+        <ClassroomModal />
+        <ComplianceSignModal />
       </Suspense>
       <DemoUpgradeModal />
     </div>

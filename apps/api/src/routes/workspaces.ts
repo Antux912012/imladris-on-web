@@ -81,6 +81,7 @@ export async function registerWorkspaceRoutes(
         slug: workspaces.slug,
         name: workspaces.name,
         kernelMode: workspaces.kernelMode,
+        toolchainId: workspaces.toolchainId,
         ownerId: workspaces.ownerId,
         createdAt: workspaces.createdAt,
         role: workspaceMembers.role,
