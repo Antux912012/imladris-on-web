@@ -16,6 +16,19 @@ function stripFrontmatter(src: string): string {
 function renderMathAndMarkdown(raw: string, dark: boolean): string {
   let text = stripFrontmatter(raw);
 
+  // Convert Quarto callout blocks ::: {.callout-note} ... ::: into blockquotes
+  text = text.replace(
+    /:::\s*\{\.callout-(\w+)[^}]*\}\s*\n([\s\S]*?)\n:::/g,
+    (_m, kind: string, body: string) => {
+      const label = kind.charAt(0).toUpperCase() + kind.slice(1);
+      const quoted = body
+        .split("\n")
+        .map((l) => `> ${l}`)
+        .join("\n");
+      return `> **${label}**\n${quoted}`;
+    }
+  );
+
   // Replace display math $$...$$
   text = text.replace(/\$\$([\s\S]+?)\$\$/g, (_m, expr: string) => {
     try {

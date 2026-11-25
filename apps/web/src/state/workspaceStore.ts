@@ -49,6 +49,8 @@ interface WorkspaceState {
   showShareModal: boolean;
   showPluginModal: boolean;
   showHistoryModal: boolean;
+  showDemoUpgradeModal: boolean;
+  demoPromptShownOnce: boolean;
 
   setUser: (user: User | null) => void;
   setWorkspaces: (workspaces: WorkspaceWithRole[]) => void;
@@ -75,6 +77,8 @@ interface WorkspaceState {
   setShowShareModal: (open: boolean) => void;
   setShowPluginModal: (open: boolean) => void;
   setShowHistoryModal: (open: boolean) => void;
+  setShowDemoUpgradeModal: (open: boolean) => void;
+  triggerDemoUpgradePrompt: () => void;
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
@@ -169,4 +173,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   setShowShareModal: (showShareModal) => set({ showShareModal }),
   setShowPluginModal: (showPluginModal) => set({ showPluginModal }),
   setShowHistoryModal: (showHistoryModal) => set({ showHistoryModal }),
+  showDemoUpgradeModal: false,
+  demoPromptShownOnce: false,
+  setShowDemoUpgradeModal: (showDemoUpgradeModal) => set({ showDemoUpgradeModal }),
+  triggerDemoUpgradePrompt: () => {
+    if (!get().demoPromptShownOnce) {
+      set({ demoPromptShownOnce: true, showDemoUpgradeModal: true });
+    }
+  },
 }));

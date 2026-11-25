@@ -20,6 +20,7 @@ _FORMAT_EXT = {
     "docx": ".docx",
     "rtf": ".rtf",
     "odt": ".odt",
+    "odp": ".odp",
     "latex": ".tex",
     "revealjs": ".html",
     "ipynb": ".ipynb",

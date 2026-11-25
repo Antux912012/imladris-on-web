@@ -65,6 +65,7 @@ export const ExportFormatSchema = z.enum([
   "html",
   "pdf",
   "odt",
+  "odp",
   "rtf",
   "docx",
   "latex",

@@ -129,6 +129,37 @@ export function RibbonBar() {
           <Code2 className="h-3.5 w-3.5" /> +R
         </button>
 
+        <button
+          type="button"
+          onClick={() =>
+            insertIntoEditor('\n$$\n\\hat{\\beta} = (X^{\\top} X)^{-1} X^{\\top} y\n$$\n')
+          }
+          title="Insert LaTeX Math Block"
+          className="ui-hover flex items-center gap-1 whitespace-nowrap rounded px-2 py-1"
+        >
+          +Math
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            insertIntoEditor('\n```{mermaid}\nflowchart LR\n  A[Raw Data] --> B[Analysis] --> C[Manuscript]\n```\n')
+          }
+          title="Insert Mermaid Diagram"
+          className="ui-hover flex items-center gap-1 whitespace-nowrap rounded px-2 py-1"
+        >
+          +Mermaid
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            insertIntoEditor('\n::: {.callout-note}\n## Clinical Note\nKey reproducible finding.\n:::\n')
+          }
+          title="Insert Quarto Callout"
+          className="ui-hover flex items-center gap-1 whitespace-nowrap rounded px-2 py-1"
+        >
+          +Callout
+        </button>
+
         <div className="relative">
           <button
             type="button"
@@ -168,6 +199,7 @@ export function RibbonBar() {
           <option value="docx">DOCX</option>
           <option value="rtf">RTF</option>
           <option value="odt">ODT</option>
+          <option value="odp">ODP Slides</option>
           <option value="latex">LaTeX (.tex)</option>
           <option value="revealjs">Reveal.js Slides</option>
           <option value="ipynb">Jupyter (.ipynb)</option>

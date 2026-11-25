@@ -17,6 +17,7 @@ import { CommentsPane } from "./components/CommentsPane";
 import { LivePreviewPane } from "./components/LivePreviewPane";
 import { PlotsPane } from "./components/PlotsPane";
 import { ElrondAiPane } from "./components/ElrondAiPane";
+import { DemoUpgradeModal } from "./components/DemoUpgradeModal";
 
 const ShareWorkspaceModal = lazy(() =>
   import("./components/ShareWorkspaceModal").then((m) => ({
@@ -220,6 +221,7 @@ export function App() {
           }
         />
       </Suspense>
+      <DemoUpgradeModal />
     </div>
   );
 }

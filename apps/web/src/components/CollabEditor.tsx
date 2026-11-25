@@ -80,6 +80,7 @@ export function CollabEditor() {
     const langExt = activeFilePath.endsWith(".py") ? python() : markdown();
 
     if (standalone) {
+      let promptTimer: number | null = null;
       const initialDoc = localStandaloneApi.readFile(
         activeWorkspace.id,
         activeFilePath
@@ -101,6 +102,10 @@ export function CollabEditor() {
                 path: activeFilePath,
                 content: nextText,
               });
+              if (promptTimer !== null) window.clearTimeout(promptTimer);
+              promptTimer = window.setTimeout(() => {
+                useWorkspaceStore.getState().triggerDemoUpgradePrompt();
+              }, 1200);
             }
           }),
         ],

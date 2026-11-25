@@ -14,7 +14,7 @@ import {
   History,
 } from "lucide-react";
 import { parseChunks } from "@imladris/shared";
-import { api } from "../lib/api";
+import { api, isBrowserStandaloneMode } from "../lib/api";
 import { useWorkspaceStore } from "../state/workspaceStore";
 
 interface Props {
@@ -44,6 +44,7 @@ export function HeaderBar({ onCreateWorkspace, onLogout }: Props) {
     setShowShareModal,
     setShowPluginModal,
     setShowHistoryModal,
+    setShowDemoUpgradeModal,
   } = useWorkspaceStore();
 
   async function handleRunAllChunks() {
@@ -206,6 +207,17 @@ export function HeaderBar({ onCreateWorkspace, onLogout }: Props) {
           )}
           <span>{layoutLabel}</span>
         </button>
+
+        {isBrowserStandaloneMode() && (
+          <button
+            type="button"
+            onClick={() => setShowDemoUpgradeModal(true)}
+            className="rounded-md px-2.5 py-1 text-xs font-semibold text-white"
+            style={{ backgroundColor: "var(--accent)" }}
+          >
+            Download / Self-Host
+          </button>
+        )}
 
         <button
           type="button"
