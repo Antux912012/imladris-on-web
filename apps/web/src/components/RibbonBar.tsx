@@ -23,12 +23,21 @@ export function RibbonBar() {
     insertIntoEditor,
     appendConsole,
     setEnvVariables,
+    setShowDemoUpgradeModal,
   } = useWorkspaceStore();
   const [showTablePicker, setShowTablePicker] = useState(false);
   const [exportFormat, setExportFormat] = useState<ExportFormat>("html");
 
   async function handleExport() {
     if (!activeWorkspace || !activeFilePath) return;
+    if (isBrowserStandaloneMode()) {
+      appendConsole(
+        "info",
+        `Browser Preview Mode: full ${exportFormat.toUpperCase()} export requires Imladris Desktop or self-hosted Imladris on Web.`
+      );
+      setShowDemoUpgradeModal(true);
+      return;
+    }
     appendConsole("info", `Exporting ${activeFilePath} as ${exportFormat}...`);
     try {
       const res = await api.exportDocument(
@@ -60,6 +69,10 @@ export function RibbonBar() {
 
   async function handleRestartKernel() {
     if (!activeWorkspace) return;
+    if (isBrowserStandaloneMode()) {
+      setShowDemoUpgradeModal(true);
+      return;
+    }
     try {
       await api.restartKernel(activeWorkspace.id);
       setEnvVariables([]);

@@ -52,13 +52,17 @@ export function DemoUpgradeModal() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4"
+      style={{ backdropFilter: "blur(4px)" }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="demo-upgrade-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) setShowDemoUpgradeModal(false);
+      }}
     >
       <div
-        className="w-full max-w-2xl rounded-xl p-6 shadow-2xl"
+        className="max-h-[90dvh] w-full max-w-2xl overflow-y-auto rounded-xl p-6 shadow-2xl"
         style={{
           backgroundColor: "var(--bg-surface)",
           color: "var(--fg-primary)",
@@ -124,8 +128,11 @@ export function DemoUpgradeModal() {
                 href="https://github.com/Antux912012/imladris/releases/latest"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-white"
-                style={{ backgroundColor: "var(--accent)" }}
+                className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold"
+                style={{
+                  backgroundColor: "var(--accent)",
+                  color: "var(--accent-fg)",
+                }}
               >
                 <Download className="h-3.5 w-3.5" /> Download Imladris
               </a>

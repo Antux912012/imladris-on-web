@@ -49,6 +49,14 @@ export function HeaderBar({ onCreateWorkspace, onLogout }: Props) {
 
   async function handleRunAllChunks() {
     if (!activeWorkspace) return;
+    if (isBrowserStandaloneMode()) {
+      appendConsole(
+        "info",
+        "Browser Preview Mode: install Imladris Desktop or self-host Imladris on Web (Docker/Podman/K8s) for live R & Python execution."
+      );
+      setShowDemoUpgradeModal(true);
+      return;
+    }
     const chunks = parseChunks(docContent);
     if (chunks.length === 0) {
       appendConsole("info", "No executable chunks found in active document.");
@@ -212,8 +220,11 @@ export function HeaderBar({ onCreateWorkspace, onLogout }: Props) {
           <button
             type="button"
             onClick={() => setShowDemoUpgradeModal(true)}
-            className="rounded-md px-2.5 py-1 text-xs font-semibold text-white"
-            style={{ backgroundColor: "var(--accent)" }}
+            className="rounded-md px-2.5 py-1 text-xs font-semibold"
+            style={{
+              backgroundColor: "var(--accent)",
+              color: "var(--accent-fg)",
+            }}
           >
             Download / Self-Host
           </button>

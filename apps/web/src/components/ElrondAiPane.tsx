@@ -3,7 +3,7 @@
 
 import { useState, type FormEvent } from "react";
 import { Sparkles, Send } from "lucide-react";
-import { api } from "../lib/api";
+import { api, isBrowserStandaloneMode } from "../lib/api";
 import { useWorkspaceStore } from "../state/workspaceStore";
 
 interface ChatMessage {
@@ -12,7 +12,7 @@ interface ChatMessage {
 }
 
 export function ElrondAiPane() {
-  const { docContent, insertIntoEditor } = useWorkspaceStore();
+  const { docContent, insertIntoEditor, setShowDemoUpgradeModal } = useWorkspaceStore();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -27,6 +27,18 @@ export function ElrondAiPane() {
       { role: "user", content: promptText },
     ];
     setMessages(nextMessages);
+    if (isBrowserStandaloneMode()) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            "Elrond AI runs locally via llama.cpp / Ollama in Imladris Desktop or on your self-hosted Imladris on Web server.",
+        },
+      ]);
+      setShowDemoUpgradeModal(true);
+      return;
+    }
     setBusy(true);
 
     try {

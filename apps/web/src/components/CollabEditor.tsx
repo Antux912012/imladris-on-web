@@ -134,6 +134,7 @@ export function CollabEditor() {
       });
 
       return () => {
+        if (promptTimer !== null) window.clearTimeout(promptTimer);
         setEditorInsertCallback(null);
         setEditorReplaceCallback(null);
         view.destroy();
